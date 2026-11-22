@@ -40,6 +40,11 @@ export function formToBirthInfo(form: BirthFormState): BirthInfo {
   let y = parseInt(form.year) || 0;
   let m = parseInt(form.month) || 0;
   let d = parseInt(form.day) || 0;
+  const origInput = form.unknownTime ? undefined : {
+    year: y, month: m, day: d,
+    clockHour: parseInt(form.clockHour) || 0,
+    clockMinute: parseInt(form.clockMinute) || 0,
+  };
   let hour = 0;
 
   // Đổi ngày giờ Tý muộn theo giờ mặt trời thực (cùng khẩu kính với chi giờ).
@@ -54,7 +59,7 @@ export function formToBirthInfo(form: BirthFormState): BirthInfo {
 
   return {
     year: y, month: m, day: d,
-    hour,
+    hour, origInput,
     gender: form.gender,
     name: form.name || undefined,
     province: form.province || undefined,

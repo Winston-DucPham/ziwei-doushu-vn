@@ -70,6 +70,11 @@ export default function ChartBoard({
   const setTimeView = (v: TimeView) => { setInnerView(v); onViewChange?.(v); };
   const setLiunianYear = (y: number) => { setInnerYear(y); onYearChange?.(y); };
 
+  const solar = chart.birthInfo.origInput ?? chart.birthInfo;
+  const lunar = chart.lunarInfo;
+  const formatDate = (day: number, month: number, year: number) =>
+    [day, month].map(value => String(value).padStart(2, '0')).join('/') + '/' + year;
+
   const palaceMap: Record<number, Palace> = {};
   chart.palaces.forEach(p => { palaceMap[p.branch] = p; });
 
@@ -203,9 +208,9 @@ export default function ChartBoard({
             );
           })()}
 
-          <div className="text-[8px] text-center leading-relaxed font-mono" style={{ color: 'var(--t-faint)', opacity: 0.75 }}>
-            {chart.lunarInfo.lunarYear}·{chart.lunarInfo.isLeapMonth ? 'nhuận ' : ''}
-            {chart.lunarInfo.lunarMonth}·{chart.lunarInfo.lunarDay}
+          <div className="text-[10px] text-center leading-relaxed tabular-nums" style={{ color: 'var(--t-text2)' }}>
+            <div>Dương lịch: {formatDate(solar.day, solar.month, solar.year)}</div>
+            <div>Âm lịch lập số: {formatDate(lunar.lunarDay, Math.abs(lunar.lunarMonth), lunar.lunarYear)}{lunar.isLeapMonth && ' (tháng nhuận)'}</div>
           </div>
         </motion.div>
 
