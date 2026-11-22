@@ -52,7 +52,7 @@ export default function ChartPage() {
           gap: 20, marginTop: 16, alignItems: 'start',
         }}
       >
-        <ChartBoard chart={chart} onPalaceSelect={setSelectedPalace} />
+        <ChartBoard chart={chart} onPalaceSelect={palace => setSelectedPalace({ ...palace })} />
         <InsightPanel chart={chart} selectedPalace={selectedPalace} />
       </div>
     </main>

@@ -67,6 +67,7 @@ async function* runJsonl(
   stdin: string,
   signal: AbortSignal,
 ): AsyncGenerator<Record<string, unknown>> {
+  signal.throwIfAborted();
   const cwd = await mkdtemp(path.join(tmpdir(), 'ziwei-ai-'));
   const child = spawn(bin, args, { cwd, env: childEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
 
@@ -76,7 +77,8 @@ async function* runJsonl(
 
   const kill = () => { if (child.exitCode === null) child.kill('SIGTERM'); };
   const timer = setTimeout(kill, TIMEOUT_MS);
-  signal.addEventListener('abort', kill, { once: true });
+  if (signal.aborted) kill();
+  else signal.addEventListener('abort', kill, { once: true });
 
   const exited = new Promise<{ code: number | null; spawnError?: Error }>(resolve => {
     child.once('error', err => resolve({ code: null, spawnError: err }));

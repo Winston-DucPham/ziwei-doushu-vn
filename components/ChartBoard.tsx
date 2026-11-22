@@ -47,7 +47,7 @@ function sortClockwise(branches: number[]): number[] {
 }
 
 /** 三方四正：本宫 + 对宫 + 两个三合宫 */
-function getSanFangSiZheng(branch: number): [number, number, number, number] {
+export function getSanFangSiZheng(branch: number): [number, number, number, number] {
   return [
     branch,
     (branch + 6) % 12,   // 对宫
@@ -100,12 +100,9 @@ export default function ChartBoard({
     : chart.lunarInfo.yearBranch;
 
   const handlePalaceClick = (branch: number) => {
-    const isDeselecting = selectedBranch === branch;
     setSelectedBranch(prev => prev === branch ? null : branch);
-    if (!isDeselecting) {
-      const palace = palaceMap[branch];
-      if (palace) onPalaceSelect?.(palace);
-    }
+    const palace = palaceMap[branch];
+    if (palace) onPalaceSelect?.(palace);
   };
 
   // 三方四正

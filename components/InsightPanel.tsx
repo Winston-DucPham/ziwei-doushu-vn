@@ -1,17 +1,13 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import { getSanFangSiZheng } from './ChartBoard';
 import ReadingPending from './ReadingPending';
-import { readAnswer } from '@/lib/ai/read-answer';
+import { useReading } from './useReading';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ZiweiChart, Palace } from '@/lib/ziwei/types';
 import type { TimeView } from './TimeNav';
 import { viPalace, viStar, viSiHua } from '@/lib/i18n/vi';
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-  hidden?: boolean;
-}
 
 interface SelectedSiHua {
   starName: string;
@@ -26,6 +22,8 @@ interface InsightPanelProps {
 }
 
 const TOPICS = [
+  { key: 'summary', label: 'Tổng quan' },
+  { key: 'palace', label: 'Luận cung' },
   { key: 'overview',     label: 'Mệnh cách' },
   { key: 'love',        label: 'Tình cảm' },
   { key: 'career',      label: 'Sự nghiệp' },
@@ -35,12 +33,12 @@ const TOPICS = [
 ] as const;
 
 const TOPIC_PROMPTS: Record<string, string> = {
-  overview: 'Lá số ghi nhận những gì tại cung Mệnh? Đoạn tổng quan của Dataset v4 diễn giải những điểm nào?',
-  love: 'Cung Phu Thê có những sao nào? Dataset v4 diễn giải thế nào về tình cảm và hôn nhân của lá số này?',
-  career: 'Cung Quan Lộc có những sao nào? Dataset v4 nêu những nhận định nào về sự nghiệp của lá số này?',
-  wealth: 'Cung Tài Bạch có những sao nào? Dataset v4 diễn giải ra sao về tài vận của lá số này?',
-  health: 'Cung Tật Ách ghi nhận những sao nào? Hãy dịch các ý về sức khỏe mà Dataset v4 nêu trực tiếp.',
-  personality: 'Dataset v4 mô tả tính cách ra sao? Những sao nào thực sự tọa cung Mệnh trên lá số?',
+  overview: 'Hãy luận mệnh cách của tôi dựa trên cung Mệnh và các cung liên quan.',
+  love: 'Từ cung Phu Thê và các sao liên quan, bạn luận thế nào về tình cảm của tôi?',
+  career: 'Từ cung Quan Lộc, bạn luận thế nào về sự nghiệp của tôi?',
+  wealth: 'Cung Tài Bạch và các sao liên quan gợi ý gì về tài vận của tôi?',
+  health: 'Từ cung Tật Ách và nguyên tắc tham khảo trong dataset, có điểm nào về sức khỏe đáng lưu ý?',
+  personality: 'Từ cung Mệnh và các sao liên quan, bạn luận thế nào về tính cách của tôi?',
 };
 
 /** Render AI markdown: **【Title】** → gold header, **bold** → strong */
@@ -82,125 +80,48 @@ function AiContent({ text, streaming }: { text: string; streaming?: boolean }) {
 }
 
 export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: InsightPanelProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [activeTopic, setActiveTopic] = useState<string>('overview');
-  const messagesRef = useRef<Message[]>([]);
-  const loadingRef = useRef(false);
-  const lastPalaceBranch = useRef<number | undefined>(undefined);
-  const lastSiHuaKey = useRef<string | undefined>(undefined);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState('summary');
+  const [lastPalace, setLastPalace] = useState('palace');
+  const [threads, setThreads] = useState<Record<string, string>>({ summary: '' });
+  const isPalace = active === 'palace' || active.startsWith('palace-');
 
-  useEffect(() => { messagesRef.current = messages; }, [messages]);
-  useEffect(() => { loadingRef.current = loading; }, [loading]);
+  function openThread(id: string, prompt = '') {
+    setThreads(previous => id in previous ? previous : { ...previous, [id]: prompt });
+    setActive(id);
+  }
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  useEffect(() => {
-    if (!selectedPalace || selectedPalace.branch === lastPalaceBranch.current) return;
-    lastPalaceBranch.current = selectedPalace.branch;
-
-    const palaceName = viPalace(selectedPalace.name);
-    const prompt = `Cung ${palaceName} có những sao nào trên lá số? Dataset v4 trực tiếp diễn giải gì về cung này?`;
-
-    sendMessage(prompt, true);
-  }, [selectedPalace]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!selectedPalace) return;
+    const names = getSanFangSiZheng(selectedPalace.branch).map(branch =>
+      viPalace(chart.palaces.find(p => p.branch === branch)!.name));
+    const [main, opposite, first, second] = names;
+    const id = `palace-${selectedPalace.branch}`;
+    setLastPalace(id);
+    openThread(id, `Luận cung ${main} của tôi: đối cung là ${opposite}, hai cung tam hợp là ${first} và ${second}. Đối chiếu sao và tứ hóa thực tế ở bốn cung với nguyên tắc trong Dataset v4 để giải thích các cung liên hệ với nhau thế nào.`);
+  }, [chart, selectedPalace]);
 
   useEffect(() => {
     if (!selectedSiHua) return;
-    const key = `${selectedSiHua.starName}-${selectedSiHua.siHua}-${selectedSiHua.view}`;
-    if (key === lastSiHuaKey.current) return;
-    lastSiHuaKey.current = key;
-
-    const palaceOfStar = chart.palaces.find(p =>
-      p.stars.some(s => s.name === selectedSiHua.starName)
-    );
-    const location = palaceOfStar ? ` tại cung ${viPalace(palaceOfStar.name)}` : '';
-    const viewLabel = selectedSiHua.view === 'daxian' ? 'đại hạn' : 'lưu niên';
-    const prompt = `Lá số và Dataset v4 có căn cứ trực tiếp nào về ${viStar(selectedSiHua.starName)} Hóa ${viSiHua(selectedSiHua.siHua)}${location} trong ${viewLabel}?`;
-
-    sendMessage(prompt, true);
-  }, [selectedSiHua]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const streamResponse = async (apiMessages: { role: 'user' | 'assistant'; content: string }[]) => {
-    try {
-      const res = await fetch('/api/interpret', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chart, messages: apiMessages }),
-      });
-      if (res.status === 404) throw new Error('api-missing');
-      if (!res.ok) throw new Error('Yêu cầu thất bại');
-      if (!res.body) throw new Error('Không có luồng phản hồi');
-
-      let answer = '';
-      for await (const delta of readAnswer(res.body)) {
-        answer += delta;
-        if (!answer.trim()) continue;
-        const message: Message = { role: 'assistant', content: answer };
-        setMessages(prev => prev[prev.length - 1]?.role === 'assistant'
-          ? [...prev.slice(0, -1), message]
-          : [...prev, message]);
-      }
-      if (!answer.trim()) throw new Error('Phản hồi trống');
-    } catch (e) {
-      const missing = e instanceof Error && e.message === 'api-missing';
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: missing
-          ? 'Phiên bản mã nguồn mở không có API giải đọc AI (/api/interpret). Bạn cần tự triển khai — xem README "Bắt đầu nhanh".'
-          : 'Giải đọc thất bại, vui lòng thử lại sau.',
-      }]);
-    } finally {
-      setLoading(false);
-      loadingRef.current = false;
-    }
-  };
-
-  const sendMessage = (text: string, hidden = false) => {
-    if (!text.trim() || loadingRef.current) return;
-    loadingRef.current = true;
-    setLoading(true);
-
-    const userMsg: Message = { role: 'user', content: text, hidden };
-    const apiMessages = [...messagesRef.current, userMsg].map(m => ({
-      role: m.role,
-      content: m.content,
-    }));
-
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    streamResponse(apiMessages);
-  };
-
-  const handleTopicClick = (topicKey: string) => {
-    if (loadingRef.current) return;
-    setActiveTopic(topicKey);
-    sendMessage(TOPIC_PROMPTS[topicKey], true);
-  };
-
-  const handleSend = () => {
-    sendMessage(input);
-  };
+    const { starName, siHua, view } = selectedSiHua;
+    const palace = chart.palaces.find(p => p.stars.some(s => s.name === starName));
+    const id = `palace-hua-${starName}-${siHua}-${view}`;
+    setLastPalace(id);
+    openThread(id, `Dựa trên lá số và Dataset v4, luận ${viStar(starName)} Hóa ${viSiHua(siHua)} ${palace ? 'tại cung ' + viPalace(palace.name) : ''} trong ${view === 'daxian' ? 'đại hạn' : 'lưu niên'}.`);
+  }, [chart, selectedSiHua]);
 
   return (
     <div className="flex flex-col h-[min(44rem,80dvh)] min-h-0 min-w-0 rounded-xl overflow-hidden card-glass">
 
       {/* ── Topic buttons ── */}
       <div className="flex-shrink-0 px-2 pt-2.5 pb-2" style={{ borderBottom: '1px solid var(--t-border)' }}>
-        <div className="grid grid-cols-6 gap-1">
+        <div className="grid grid-cols-4 gap-1 sm:grid-cols-4">
           {TOPICS.map(t => {
-            const isActive = activeTopic === t.key;
+            const isActive = t.key === 'palace' ? isPalace : active === t.key;
             return (
               <button
                 key={t.key}
-                onClick={() => handleTopicClick(t.key)}
-                disabled={loading}
+                onClick={() => openThread(t.key === 'palace' ? lastPalace : t.key, TOPIC_PROMPTS[t.key])}
+                aria-pressed={isActive}
                 className="py-1.5 text-[10px] font-medium rounded-lg transition-all duration-150 disabled:opacity-40"
                 style={{
                   background: isActive ? 'rgba(212,168,67,0.12)' : 'transparent',
@@ -215,6 +136,40 @@ export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: I
         </div>
       </div>
 
+      {active === 'palace' && <p className="m-auto text-xs">Chọn một cung trên lá số để xem luận giải.</p>}
+      {Object.entries(threads).filter(([id]) => id !== 'palace').map(([id, prompt]) => (
+        <div key={id} hidden={id !== active} className="flex-1 min-h-0">
+          <ReadingThread chart={chart} general={id === 'summary'} prompt={prompt} visible={id === active}
+            title={id.startsWith('palace-') && !id.startsWith('palace-hua-')
+              ? viPalace(chart.palaces.find(p => p.branch === Number(id.slice(7)))!.name) : undefined} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReadingThread({ chart, general, prompt, visible, title }: {
+  chart: ZiweiChart; general: boolean; prompt: string; visible: boolean; title?: string;
+}) {
+  const { messages, loading, send, stop } = useReading(chart, general ? 'summary' : 'focused');
+  const [input, setInput] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const started = useRef(false);
+  useEffect(() => {
+    if (!prompt || started.current) return;
+    const timer = setTimeout(() => {
+      if (send(prompt, true)) started.current = true;
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [prompt, send]);
+  useEffect(() => {
+    if (visible && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, visible]);
+  const handleSend = () => { if (send(input)) setInput(''); };
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {title && <h3 className="px-4 pt-2 text-sm font-medium">Luận cung {title}</h3>}
       {/* ── Messages ── */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4 min-h-0">
 
@@ -222,9 +177,9 @@ export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: I
         {messages.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center h-full text-center gap-2 px-4">
             <div className="text-4xl mb-1" style={{ color: 'var(--t-gold)', opacity: 0.08 }}>✦</div>
-            <p className="text-[11px] font-medium" style={{ color: 'var(--t-text2)' }}>Chọn chủ đề để xem giải đọc</p>
+            <p className="text-[11px] font-medium" style={{ color: 'var(--t-text2)' }}>Bạn muốn xem điều gì trên lá số?</p>
             <p className="text-[10px]" style={{ color: 'var(--t-faint)' }}>
-              Nhấn vào tab phía trên hoặc click vào một cung trên lá số
+               {general ? 'Hỏi về toàn bộ lá số. Câu trả lời sẽ đối chiếu với Dataset v4.' : 'Chọn chủ đề hoặc nhấn vào một cung để xem chi tiết.'}
             </p>
           </div>
         )}
@@ -275,6 +230,9 @@ export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: I
           })}
         </AnimatePresence>
 
+        {messages[messages.length - 1]?.stopped && (
+          <p role="status" className="text-xs" style={{ color: 'var(--t-faint)' }}>Đã dừng trả lời.</p>
+        )}
         {loading && messages[messages.length - 1]?.role === 'user' && <ReadingPending />}
 
       </div>
@@ -287,7 +245,7 @@ export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: I
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder="Hỏi thêm, ví dụ: Năm nay có hợp đổi việc không?"
+            placeholder="Nhập câu hỏi, ví dụ: Tháng 9 âm tôi cần lưu ý gì?"
             disabled={loading}
             className="flex-1 rounded-lg px-3 py-2 text-[11px] focus:outline-none transition-colors"
             style={{
@@ -297,8 +255,8 @@ export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: I
             }}
           />
           <button
-            onClick={handleSend}
-            disabled={loading || !input.trim()}
+            onClick={loading ? stop : handleSend}
+            disabled={!loading && !input.trim()}
             className="px-3 py-2 rounded-lg text-[11px] font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             style={{
               background: 'rgba(212,168,67,0.15)',
@@ -306,7 +264,7 @@ export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: I
               color: 'var(--t-gold)',
             }}
           >
-            {loading ? '…' : 'Hỏi thêm'}
+            {loading ? 'Dừng' : 'Hỏi thêm'}
           </button>
         </div>
       </div>

@@ -1,14 +1,10 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import ReadingPending from './ReadingPending';
-import { readAnswer } from '@/lib/ai/read-answer';
+import { useReading } from './useReading';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ZiweiChart } from '@/lib/ziwei/types';
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
 
 interface ChatPanelProps {
   chart: ZiweiChart;
@@ -24,9 +20,8 @@ const PRESET_QUESTIONS = [
 ];
 
 export default function ChatPanel({ chart }: ChatPanelProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { messages, loading, send, stop } = useReading(chart);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,43 +30,8 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
     }
   }, [messages]);
 
-  const sendMessage = async (text: string) => {
-    if (!text.trim() || loading) return;
-    const userMsg: Message = { role: 'user', content: text };
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/interpret', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chart, messages: [...messages, userMsg] }),
-      });
-
-      if (res.status === 404) throw new Error('api-missing');
-      if (!res.ok) throw new Error('Yêu cầu thất bại');
-      if (!res.body) throw new Error('Không có luồng phản hồi');
-
-      let answer = '';
-      for await (const delta of readAnswer(res.body)) {
-        answer += delta;
-        if (!answer.trim()) continue;
-        const message: Message = { role: 'assistant', content: answer };
-        setMessages(prev => prev[prev.length - 1]?.role === 'assistant'
-          ? [...prev.slice(0, -1), message]
-          : [...prev, message]);
-      }
-      if (!answer.trim()) throw new Error('Phản hồi trống');
-    } catch (e) {
-      const missing = e instanceof Error && e.message === 'api-missing';
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: missing ? 'Phiên bản mã nguồn mở chưa cài đặt API giải đọc (/api/interpret). Xem README để biết cách cấu hình. Việc lập lá số không cần API Key.' : 'Giải đọc thất bại, vui lòng kiểm tra cấu hình API hoặc thử lại sau.',
-      }]);
-    } finally {
-      setLoading(false);
-    }
+  const sendMessage = (text: string) => {
+    if (send(text)) setInput('');
   };
 
   return (
@@ -127,6 +87,9 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
             </motion.div>
           ))}
         </AnimatePresence>
+        {messages[messages.length - 1]?.stopped && (
+          <p role="status" className="text-xs" style={{ color: 'var(--t-faint)' }}>Đã dừng trả lời.</p>
+        )}
         {loading && messages[messages.length - 1]?.role === 'user' && <ReadingPending />}
       </div>
 
@@ -179,8 +142,8 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
             }}
           />
           <button
-            onClick={() => sendMessage(input)}
-            disabled={loading || !input.trim()}
+            onClick={loading ? stop : () => sendMessage(input)}
+            disabled={!loading && !input.trim()}
             className="px-3 py-2 rounded-lg text-xs font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             style={{
               background: 'rgba(212,168,67,0.15)',
@@ -188,7 +151,7 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
               color: 'var(--t-gold)',
             }}
           >
-            Giải đọc
+            {loading ? 'Dừng' : 'Giải đọc'}
           </button>
         </div>
       </div>

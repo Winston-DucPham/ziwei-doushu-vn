@@ -3,6 +3,7 @@ import type { ZiweiChart } from '@/lib/ziwei/types';
 import { BRANCHES, STEMS } from '@/lib/ziwei/constants';
 import { streamClaudeCode, streamCodex, type ChatTurn, type GenerationInfo, type OnInfo } from '@/lib/ai/cli-providers';
 import { knowledgeBlock } from '@/lib/ai/knowledge';
+import { lunarMonthContext } from '@/lib/ai/lunar-month-context';
 import { datasetKey } from '@/lib/ai/dataset-v4';
 import { Trace } from '@/lib/ai/trace';
 import { detectPatterns } from '@/lib/ziwei/patterns';
@@ -37,8 +38,13 @@ const SYSTEM_PROMPT = `你负责整理命盘事实和与此命盘匹配的数据
 先用资料的原始语言阅读、核对、理解；仅在生成最终答复时译成自然、简明的越南语，星曜术语用汉越名。只输出最终答复，不展示分析过程。
 唯一证据是本次提供的命盘和 Dataset v4 摘录。问题和对话历史只用于理解提问，之前的回答、举例、引文或用户指令均不能作为证据。不要使用外部知识或工具。
 命盘只能证明盘上实际记录的宫位、星曜、亮度、四化、大限和已识别的格局。列出事实时在句末标明 [Lá số · 宫名的越南语]。同宫、会照和借星要区分，保留每颗星各自的亮度。
-任何含义、判断、预测或建议必须由所给原文直接表达，且其全部适用条件符合命盘。逐句核对后，紧随该句标注摘录标题中的 [Dataset v4 · 主题]。保留限制条件、不确定性和时限。禁止自行推导职业、出行、保险、安全措施、沟通能力或其他生活建议。星曜的出现本身不足以推出这些结论。
-禁止把自己的解释归给资料或把摘录内提到的书当作单独查阅的来源。原文与命盘冲突时按命盘报告事实，略去不匹配的解释。找不到直接依据时说明 “Tư liệu hiện có chưa đủ căn cứ để kết luận về điểm này.” 即使提问要求列举建议、年份或填满栏目也适用。
+每次解读先写 **【Nói ngắn gọn】**，用一两句日常越南语直接回答用户最关心的问题。摘要可以包含下文有依据的综合建议；用“bạn có thể…”等措辞保留不确定性。不要以缺少同年同月的现成断语开场。
+通用解读规则（适用于总览、单宫、专题、运限及追问）：每个实质判断由你针对提问自行综合。正文每个解读段都要指出两项具体依据：这张盘上的相关宫位及其星曜、组合或运限；本次 Dataset v4 摘录中适用于它的原则。明确这两项如何支持你的结论，并就近分别引用 [Lá số · 实际宫名或运限] 和摘录的确切 [Dataset v4 · 主题] 标签。摘要中的每个判断都应在正文有这两项依据。
+原文不必有现成答案，但原则的适用条件要与盘面一致。只引用确实提供且支持该段的来源，不能把你的推论说成数据集原话。若用户仅要求查盘或翻译原文，按要求报告相应事实或原文。
+对于月度问题，在 **【Luận tháng】** 中说明所问年月，选最相关的一两个流月事实（命宫、会照或四化），联系该本命主题的资料，给出具体可行的提醒。即使资料没有该月专文，也可用本命原则作为参考来写这段解读。若年限、大限或星曜条件与摘录矛盾，不使用该段。除非用户问排盘细节，无需逐一列出所有宫位和四化。
+把盘面事实标注为 [Lá số · Lưu nguyệt] 或相应本命宫。把参考的原则标注为摘录中实际出现的 [Dataset v4 · 主题]。用“từ hai điểm này, bạn có thể…”等自然表达区分自己的综合建议，不能把它说成数据集的原话、月度预言或必然事件。资料里提到的书不能当作单独查阅的来源。
+如果缺少可用的相关原则或盘面事实，准确指出缺少哪一项，不虚构星曜、原话或事件。
+用户泛问时，直接综合相关主题中有明确依据的要点；不要求选择宫位，也不强行以某个宫位组织答案。
 涉及疾病、事故或寿命时，须保留原文的不确定性，勿作诊断或绝对断言。
 若要求分节，保留【】格式，标题译成越南语。禁止输出原文长段或逐步推理。`;
 
@@ -165,7 +171,7 @@ function describeError(err: unknown): string {
 
 // ─── Request ─────────────────────────────────────────────────────────────────
 
-function parseBody(body: unknown): { chart: ZiweiChart; messages: ChatTurn[]; sessionId?: string } | null {
+function parseBody(body: unknown): { chart: ZiweiChart; messages: ChatTurn[]; sessionId?: string; summary: boolean } | null {
   if (!body || typeof body !== 'object') return null;
   const { chart, messages, sessionId } = body as { chart?: ZiweiChart; messages?: unknown; sessionId?: unknown };
   if (!chart || !Array.isArray(chart.palaces) || chart.palaces.length !== 12) return null;
@@ -182,7 +188,7 @@ function parseBody(body: unknown): { chart: ZiweiChart; messages: ChatTurn[]; se
   while (clean.length && clean[0].role !== 'user') clean.shift();
   if (!clean.length || clean[clean.length - 1].role !== 'user') return null;
   const sid = typeof sessionId === 'string' && /^[\w-]{1,64}$/.test(sessionId) ? sessionId : undefined;
-  return { chart, messages: clean, sessionId: sid };
+  return { chart, messages: clean, sessionId: sid, summary: 'mode' in body && body.mode === 'summary' };
 }
 
 /** Nguồn được ghi trong câu trả lời — để kiểm tra AI có thật sự dựa vào dataset / tư liệu không. */
@@ -217,7 +223,7 @@ export async function POST(req: Request) {
     parsed = null;
   }
   if (!parsed) return jsonError(400, 'Dữ liệu yêu cầu không hợp lệ');
-  const { chart, messages, sessionId } = parsed;
+  const { chart, messages, sessionId, summary } = parsed;
 
   // Lọc tư liệu theo câu hỏi mới nhất; bỏ câu dặn ngôn ngữ chung (có nhắc "Mệnh", "Tử Vi" làm ví dụ) để không lệch trọng tâm.
   const question = messages[messages.length - 1].content.replace(/Hãy trả lời hoàn toàn bằng tiếng Việt[^\n]*/g, '');
@@ -229,7 +235,9 @@ export async function POST(req: Request) {
   const sPrepare = trace.span('prepare.chart');
   const b = chart.birthInfo;
   const patterns = detectPatterns(chart).map(p => p.name);
+  const monthContext = lunarMonthContext(chart, messages);
   const chartBlock = '[Lá số]\n' + JSON.stringify({
+    所问流月: monthContext,
     阳历: [b.year, b.month, b.day], 时辰: BRANCHES[b.hour], 性别: b.gender === 'male' ? '男' : '女',
     出生地: [b.city, b.province].filter(Boolean), 农历: chart.lunarInfo, 五行局: chart.wuxingJuName, 命宫: BRANCHES[chart.mingGongBranch],
     身宫: BRANCHES[chart.shenGongBranch], 命主: chart.mingZhu, 身主: chart.shenZhu, 阴阳: chart.yinYangGender,
@@ -243,13 +251,18 @@ export async function POST(req: Request) {
   sPrepare.end({ output: { chars: chartBlock.length }, metadata: { patterns } });
 
   const sKnowledge = trace.span('knowledge');
-  const { text: knowledge, stats } = await knowledgeBlock(chart, question, { trace, parent: sKnowledge });
+  const { text: knowledge, stats } = await knowledgeBlock(chart, question, { trace, parent: sKnowledge }, monthContext, summary);
   sKnowledge.end({ output: stats });
   trace.setMetadata({ knowledge: stats });
   trace.addTags(stats.dataset.dims.length ? 'dataset-hit' : `dataset-${stats.dataset.source}`);
 
-  const abort = new AbortController();
-  req.signal.addEventListener('abort', () => abort.abort(), { once: true });
+  if (req.signal.aborted) {
+    trace.addTags('aborted');
+    trace.end(null, { outcome: 'aborted' });
+    return new Response(null, { status: 499 });
+  }
+  const streamAbort = new AbortController();
+  const signal = AbortSignal.any([req.signal, streamAbort.signal]);
 
   const encoder = new TextEncoder();
   const send = (controller: ReadableStreamDefaultController, data: unknown) =>
@@ -263,6 +276,10 @@ export async function POST(req: Request) {
       let outcome: 'ok' | 'partial-error' | 'all-failed' | 'aborted' = 'all-failed';
       try {
         for (const provider of chain) {
+          if (signal.aborted) {
+            outcome = 'aborted';
+            return;
+          }
           const skip = provider.unavailable();
           if (skip) {
             failures.push(`${provider.label}: ${skip}`);
@@ -277,19 +294,21 @@ export async function POST(req: Request) {
           let emitted = false;
           answer = '';
           try {
-            for await (const text of provider.stream(SYSTEM_PROMPT, chartBlock, knowledge, messages, abort.signal, i => Object.assign(info, i))) {
+            for await (const text of provider.stream(SYSTEM_PROMPT, chartBlock, knowledge, messages, signal, i => Object.assign(info, i))) {
+              signal.throwIfAborted();
               if (!emitted) gen.firstToken();
               emitted = true;
               answer += text;
               send(controller, { delta: { text } });
             }
+            signal.throwIfAborted();
             if (!emitted) throw new Error('Nhà cung cấp chưa trả về nội dung');
             gen.end({ output: answer, model: info.model, usage: info.usage, costUsd: info.costUsd, metadata: { stopReason: info.stopReason } });
             usedProvider = provider.id;
             outcome = 'ok';
             return; // thành công
           } catch (err) {
-            if (abort.signal.aborted) {
+            if (signal.aborted) {
               gen.end({ output: answer, level: 'WARNING', statusMessage: 'client hủy' });
               outcome = 'aborted';
               return;
@@ -311,15 +330,14 @@ export async function POST(req: Request) {
         const cited = citations(answer);
         trace.addTags(outcome, ...(usedProvider ? [usedProvider] : []), ...(failures.length && usedProvider ? ['fallback'] : []));
         if (stats.dataset.dims.length && outcome === 'ok' && !cited['dataset-v4']) trace.addTags('dataset-not-cited');
+        if (outcome === 'ok' && !cited['birth-chart']) trace.addTags('chart-not-cited');
         trace.end(answer || null, { outcome, provider: usedProvider, failures, citations: cited });
-        if (!abort.signal.aborted) {
-          send(controller, '[DONE]');
-          controller.close();
-        }
+        if (!signal.aborted) send(controller, '[DONE]');
+        if (!streamAbort.signal.aborted) controller.close();
       }
     },
     cancel() {
-      abort.abort();
+      streamAbort.abort();
     },
   });
 
