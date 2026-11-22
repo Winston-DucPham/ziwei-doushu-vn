@@ -308,8 +308,12 @@ export async function POST(req: Request) {
             for await (const text of provider.stream(SYSTEM_PROMPT, chartBlock, knowledge, messages, abort.signal, i => Object.assign(info, i))) {
               if (!emitted) gen.firstToken();
               emitted = true;
-              answer += text;
-              send(controller, { delta: { text } });
+              if (text.startsWith('\x00')) {
+                send(controller, { delta: { thinking: text.slice(1) } });
+              } else {
+                answer += text;
+                send(controller, { delta: { text } });
+              }
             }
             gen.end({ output: answer, model: info.model, usage: info.usage, costUsd: info.costUsd, metadata: { stopReason: info.stopReason } });
             usedProvider = provider.id;

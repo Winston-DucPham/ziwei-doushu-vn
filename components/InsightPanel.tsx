@@ -3,12 +3,11 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ZiweiChart, Palace } from '@/lib/ziwei/types';
 import type { TimeView } from './TimeNav';
-import { viPalace, viStar, viSiHua } from '@/lib/i18n/vi';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  hidden?: boolean; // don't show user bubble for auto/topic messages
+  hidden?: boolean;
 }
 
 interface SelectedSiHua {
@@ -32,154 +31,121 @@ const TOPICS = [
   { key: 'personality', label: 'Tính cách' },
 ] as const;
 
-/** Mọi prompt đều yêu cầu trả lời bằng tiếng Việt. */
-const VI_INSTRUCTION = 'Hãy trả lời hoàn toàn bằng tiếng Việt, dùng thuật ngữ Tử Vi Hán-Việt (ví dụ: cung Mệnh, Tử Vi, Hóa Lộc). Chỉ luận dựa trên lá số đang xem: mỗi nhận định phải chỉ ra sao, cung, tứ hóa hoặc đại hạn cụ thể trong lá số này.';
-
 const TOPIC_PROMPTS: Record<string, string> = {
-  overview: `${VI_INSTRUCTION}
-Hãy lập phần tổng quan mệnh cách theo cấu trúc sau:
+  overview: `请生成命格总览，按以下结构输出：
 
-**【Định tính mệnh cách】**
-Một câu khái quát cách cục cốt lõi và khí chất của đương số.
+**【命格定性】**
+用一句话概括这个命盘的核心格局与命主气质。
 
-**【Chính tinh cung Mệnh】**
-Đặc tính cốt lõi của chính tinh thủ Mệnh.
+**【主星解读】**
+命宫主星的核心特质，引用倪海厦原话或观点。
 
-**【Tam phương tứ chính】**
-Phân tích liên động giữa Tài Bạch, Quan Lộc, Thiên Di và cách cục tổng thể.
+**【三方四正】**
+财、官、迁三宫的联动分析及整体格局。
 
-**【Đại hạn hiện tại】**
-Xu hướng vận trình của đại hạn hiện tại và điều đáng chú ý nhất.
+**【当前大限】**
+当下大限运势方向与最值得关注的事项。
 
-**【Ưu điểm và lưu ý】**
-Thiên phú nổi bật của lá số, cùng các rủi ro hoặc bài học cần lưu ý.`,
+**【优势与注意】**
+命盘天赋优势，以及需要注意的风险或功课。`,
 
-  love: `${VI_INSTRUCTION}
-Hãy phân tích sâu vận tình cảm – hôn nhân theo cấu trúc sau:
+  love: `请深度分析感情婚姻运，按以下结构输出：
 
-**【Cách cục tình cảm】**
-Một câu định tính mệnh cách tình cảm.
+**【感情格局】**
+一句话定性感情命格。
 
-**【Cung Phu Thê】**
-Chính tinh, tứ hóa của cung Phu Thê và ý nghĩa cụ thể.
+**【夫妻宫分析】**
+夫妻宫主星、四化，以及倪海厦体系的具体解读。
 
-**【Liên động tam phương】**
-Ảnh hưởng của các cung liên quan đến tình cảm.
+**【三方联动】**
+相关宫位对感情的影响。
 
-**【Tình cảm trong đại hạn hiện tại】**
-Hướng đi tình cảm trong 10 năm hiện tại và các mốc then chốt.
+**【当前大限感情运】**
+当下10年感情走向与关键节点。
 
-**【Lời khuyên thực tế】**
-Lời khuyên tình cảm cụ thể, khả thi.`,
+**【实际建议】**
+具体可行的感情建议。`,
 
-  career: `${VI_INSTRUCTION}
-Hãy phân tích sâu vận sự nghiệp theo cấu trúc sau:
+  career: `请深度分析事业运，按以下结构输出：
 
-**【Cách cục sự nghiệp】**
-Một câu định tính: hợp làm công hay hợp khởi nghiệp.
+**【事业格局】**
+一句话定性事业命格，宜任职或宜创业。
 
-**【Cung Quan Lộc】**
-Chính tinh, tứ hóa của cung Quan Lộc và nhận định về cấu hình này.
+**【官禄宫分析】**
+官禄宫主星、四化，以及倪师对这种配置的判断。
 
-**【Liên động cung Tài Bạch】**
-Quan hệ giữa tài vận và sự nghiệp, nguồn thu nhập.
+**【财帛宫联动】**
+财运与事业的关系，财路来源分析。
 
-**【Sự nghiệp trong đại hạn hiện tại】**
-Hướng đi sự nghiệp trong 10 năm hiện tại.
+**【当前大限事业运】**
+当下10年事业走向。
 
-**【Lời khuyên thực tế】**
-Ngành nghề, hướng đi và chiến lược phù hợp.`,
+**【实际建议】**
+适合的方向、行业与策略。`,
 
-  wealth: `${VI_INSTRUCTION}
-Hãy phân tích sâu tài vận theo cấu trúc sau:
+  wealth: `请深度分析财运，按以下结构输出：
 
-**【Cách cục tài vận】**
-Một câu định tính kiểu tài: chủ động cầu tài hay tài đến thụ động.
+**【财运格局】**
+一句话定性财运模式，是主动财还是被动财。
 
-**【Cung Tài Bạch】**
-Chính tinh, tứ hóa của cung Tài Bạch; nguồn gốc và dòng chảy tiền bạc.
+**【财帛宫分析】**
+财帛宫主星、四化，财富来源与流动模式。
 
-**【Cung Điền Trạch (kho tài)】**
-Khả năng tích lũy và vận bất động sản.
+**【田宅宫（财库）】**
+积蓄能力与不动产运势分析。
 
-**【Tài vận đại hạn hiện tại】**
-Xu hướng tài chính hiện tại và điểm cần lưu ý.
+**【当前大限财运】**
+当下财运走向与注意事项。
 
-**【Lời khuyên quản lý tài chính】**
-Lời khuyên tài chính cụ thể.`,
+**【理财建议】**
+具体的财务建议。`,
 
-  health: `${VI_INSTRUCTION}
-Hãy phân tích vận sức khỏe theo cấu trúc sau:
+  health: `请分析健康运势，按以下结构输出：
 
-**【Sao cung Tật Ách】**
-Các sao trong cung Tật Ách và ý nghĩa về sức khỏe.
+**【疾厄宫主星】**
+疾厄宫星曜与健康含义。
 
-**【Rủi ro chính】**
-Những nguy cơ sức khỏe chính và bộ phận cơ thể cần chú ý.
+**【主要风险】**
+结合倪海厦子午流注理论，分析主要健康隐患与需关注的部位。
 
-**【Xu hướng sức khỏe theo đại hạn】**
-Xu hướng hiện tại và các giai đoạn then chốt.
+**【大限健康走势】**
+当下健康趋势与关键时间段。
 
-**【Lời khuyên phòng ngừa】**
-Điều cần lưu ý và hướng dưỡng sinh cụ thể.`,
+**【预防建议】**
+具体注意事项与养生方向。`,
 
-  personality: `${VI_INSTRUCTION}
-Hãy phân tích sâu tính cách theo cấu trúc sau:
+  personality: `请深度解析性格特质，按以下结构输出：
 
-**【Tính cách theo chính tinh cung Mệnh】**
-Đặc điểm tính cách cốt lõi của chính tinh thủ Mệnh.
+**【命宫主星性格】**
+命宫主星的核心性格特质，引用倪师原话。
 
-**【Tổng hợp tam phương】**
-Ảnh hưởng của Tài Bạch, Quan Lộc, Thiên Di lên tính cách — bức tranh toàn diện.
+**【三方性格综合】**
+财、官、迁三宫对性格的影响，全貌描绘。
 
-**【Cách giao tiếp, quan hệ】**
-Cách tương tác với người khác và phong cách đối nhân xử thế.
+**【人际关系模式】**
+与他人互动方式、待人处世风格。
 
-**【Ưu điểm và bài học cuộc đời】**
-Thiên phú nổi bật và những bài học cần đối mặt.`,
+**【优势与人生课题】**
+天赋优势，以及需要面对的人生功课。`,
 };
 
-/** Khóa theo tên cung tiếng Việt (viPalace) */
 const PALACE_ROLES: Record<string, string> = {
-  'Mệnh':       'bản thân, tính cách, cách cục bẩm sinh',
-  'Huynh Đệ':   'anh chị em, đối tác',
-  'Phu Thê':    'tình cảm, hôn nhân',
-  'Tử Tức':     'con cái, cấp dưới',
-  'Tài Bạch':   'nguồn tiền, cách kiếm tiền',
-  'Tật Ách':    'sức khỏe, tai nạn',
-  'Thiên Di':   'đi xa, cơ hội bên ngoài, quan hệ xã hội',
-  'Nô Bộc':     'bạn bè, quý nhân, tiểu nhân',
-  'Quan Lộc':   'sự nghiệp, địa vị xã hội',
-  'Điền Trạch': 'nhà đất, môi trường gia đình',
-  'Phúc Đức':   'đời sống tinh thần, phúc phần',
-  'Phụ Mẫu':    'cha mẹ, giấy tờ, hợp đồng',
+  '命宫':   '自我、性格、先天格局',
+  '兄弟宫': '兄弟关系、合伙人',
+  '夫妻宫': '感情关系、婚姻状态',
+  '子女宫': '子女缘分、下属关系',
+  '财帛宫': '财运来源、收入方式',
+  '疾厄宫': '身体健康、意外',
+  '迁移宫': '外出机遇、人际格局',
+  '交友宫': '朋友圈、贵人、小人',
+  '官禄宫': '事业成就、社会地位',
+  '田宅宫': '不动产、家庭环境',
+  '福德宫': '精神享受、内心福分',
+  '父母宫': '父母关系、文书契约',
 };
 
 /** Render AI markdown: **【Title】** → gold header, **bold** → strong */
 function AiContent({ text, streaming }: { text: string; streaming?: boolean }) {
-  if (!text && streaming) {
-    return (
-      <div>
-        <style>{`@keyframes ip-dot{0%,80%,100%{transform:scale(0.6);opacity:0.3}40%{transform:scale(1);opacity:0.8}}`}</style>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0' }}>
-          <span style={{ fontSize: '11px', color: 'var(--t-faint)', fontStyle: 'italic' }}>
-            Đang phân tích lá số
-          </span>
-          <span style={{ display: 'inline-flex', gap: '3px', alignItems: 'center' }}>
-            {[0, 1, 2].map(i => (
-              <span key={i} style={{
-                width: '4px', height: '4px', borderRadius: '50%',
-                background: 'var(--t-gold)', opacity: 0.6,
-                animation: `ip-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
-                display: 'inline-block',
-              }} />
-            ))}
-          </span>
-        </div>
-      </div>
-    );
-  }
-
   const lines = text.split('\n');
   return (
     <div className="space-y-0.5">
@@ -216,97 +182,124 @@ function AiContent({ text, streaming }: { text: string; streaming?: boolean }) {
   );
 }
 
+function ThinkingBlock({ text }: { text: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mb-3"
+    >
+      <div
+        className="text-[9px] tracking-widest mb-1.5 flex items-center gap-1.5"
+        style={{ color: 'var(--t-faint)' }}
+      >
+        <span className="animate-pulse" style={{ color: 'var(--t-gold)', opacity: 0.5 }}>✦</span>
+        Đang phân tích lá số…
+      </div>
+      {text && (
+        <div
+          className="relative rounded-lg px-2.5 py-2 max-h-16 overflow-hidden"
+          style={{ background: 'rgba(212,168,67,0.04)', border: '1px solid rgba(212,168,67,0.1)' }}
+        >
+          <p className="text-[9px] leading-relaxed break-words" style={{ color: 'var(--t-faint)', fontStyle: 'italic' }}>
+            {text.slice(-400)}
+          </p>
+          <div
+            className="absolute bottom-0 left-0 right-0 h-5 rounded-b-lg"
+            style={{ background: 'linear-gradient(to bottom, transparent, var(--t-card, #0a0a0a))' }}
+          />
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: InsightPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [activeTopic, setActiveTopic] = useState<string | null>(null);
-  // Gợi ý luận giải từ thao tác trên lá số — chỉ gửi khi người dùng bấm
-  const [suggestion, setSuggestion] = useState<{ label: string; prompt: string } | null>(null);
-  const messagesRef = useRef<Message[]>([]); // always-current copy for closures
+  const [activeTopic, setActiveTopic] = useState<string>('overview');
+  const [thinkingText, setThinkingText] = useState('');
+  const [isThinking, setIsThinking] = useState(false);
+  const messagesRef = useRef<Message[]>([]);
   const loadingRef = useRef(false);
+  const autoLoaded = useRef(false);
   const lastPalaceBranch = useRef<number | undefined>(undefined);
   const lastSiHuaKey = useRef<string | undefined>(undefined);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Gom mọi câu hỏi trong một lần mở lá số thành một session trong tracing (Langfuse).
-  const sessionId = useRef(typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now()));
 
-  // Keep refs in sync
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { loadingRef.current = loading; }, [loading]);
 
-  // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, thinkingText]);
 
-  // Palace selected → offer analysis (no auto-call)
+  useEffect(() => {
+    if (autoLoaded.current) return;
+    autoLoaded.current = true;
+    sendMessage(TOPIC_PROMPTS.overview, true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!selectedPalace || selectedPalace.branch === lastPalaceBranch.current) return;
     lastPalaceBranch.current = selectedPalace.branch;
 
     const majorStars = selectedPalace.stars.filter(s => s.type === 'major');
     const starDesc = majorStars.length > 0
-      ? majorStars.map(s => `${viStar(s.name)}${s.siHua ? ' Hóa ' + viSiHua(s.siHua) : ''}`).join(', ')
-      : 'vô chính diệu (mượn sao cung đối)';
-    const palaceVi = viPalace(selectedPalace.name);
-    const role = PALACE_ROLES[palaceVi] ?? '';
+      ? majorStars.map(s => `${s.name}${s.siHua ? '化' + s.siHua : ''}`).join('、')
+      : '空宫（借对宫）';
+    const role = PALACE_ROLES[selectedPalace.name] ?? '';
 
-    const prompt = `${VI_INSTRUCTION}
-Hãy phân tích trọng tâm cung 【${palaceVi}】 (chủ về: ${role}); chính tinh của cung là ${starDesc}. Trình bày theo cấu trúc sau:
+    const prompt = `请重点分析【${selectedPalace.name}】（主管：${role}），该宫主星为${starDesc}，按以下结构输出：
 
-**【Định tính cung】**
-Ý nghĩa của cung ${palaceVi} trong lá số và nhận định tổng thể về cấu hình sao này.
+**【宫位定性】**
+${selectedPalace.name}在命盘中的意义，以及这种星曜配置的整体判断。
 
-**【Giải chính tinh】**
-Ý nghĩa của chính tinh khi tọa thủ tại cung này.
+**【主星解读】**
+主星在此宫的倪海厦体系解读，引用具体观点。
 
-**【Liên động tam phương tứ chính】**
-Ảnh hưởng của các cung tam phương tứ chính lên cung này.
+**【三方四正联动】**
+三方四正宫位对此宫的影响。
 
-**【Lời khuyên thực tế】**
-Lời khuyên cụ thể dựa trên cung này.`;
+**【实际建议】**
+基于此宫的具体建议。`;
 
-    setSuggestion({ label: `Luận giải cung ${palaceVi}`, prompt });
+    sendMessage(prompt, true);
   }, [selectedPalace]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Tứ hóa selected → offer analysis (no auto-call)
   useEffect(() => {
     if (!selectedSiHua) return;
     const key = `${selectedSiHua.starName}-${selectedSiHua.siHua}-${selectedSiHua.view}`;
     if (key === lastSiHuaKey.current) return;
     lastSiHuaKey.current = key;
 
-    // 找出该星所在宫位
     const palaceOfStar = chart.palaces.find(p =>
       p.stars.some(s => s.name === selectedSiHua.starName)
     );
-    const palaceName = palaceOfStar ? viPalace(palaceOfStar.name) : 'cung không xác định';
-    const viewLabel = selectedSiHua.view === 'daxian' ? 'Đại hạn' : 'Lưu niên';
-    const star = viStar(selectedSiHua.starName);
-    const hua = `Hóa ${viSiHua(selectedSiHua.siHua)}`;
+    const palaceName = palaceOfStar?.name ?? '未知宫位';
+    const viewLabel = selectedSiHua.view === 'daxian' ? '大限' : '流年';
 
-    const prompt = `${VI_INSTRUCTION}
-Hãy phân tích ảnh hưởng phi hóa của 【${viewLabel}: ${star} ${hua}】 theo cấu trúc sau:
+    const prompt = `请分析【${viewLabel}${selectedSiHua.starName}化${selectedSiHua.siHua}】的飞化影响，按以下结构输出：
 
-**【Ý nghĩa cơ bản của ${hua}】**
-Ý nghĩa cốt lõi của ${hua}, và ý nghĩa riêng khi ${star} ${hua}.
+**【化${selectedSiHua.siHua}基本含义】**
+化${selectedSiHua.siHua}在倪海厦体系中的核心含义，以及${selectedSiHua.starName}化${selectedSiHua.siHua}的特殊含义。
 
-**【Ảnh hưởng tại cung】**
-${star} ${hua} rơi vào cung 【${palaceName}】 — lĩnh vực cung này chủ quản bị ảnh hưởng ra sao.
+**【落宫影响】**
+${selectedSiHua.starName}化${selectedSiHua.siHua}落在【${palaceName}】，该宫主管的领域受到何种影响，倪师如何解读。
 
-**【Đường phi hóa tam phương tứ chính】**
-Sau khi ${hua} nhập cung ${palaceName}, ảnh hưởng liên động lên tam phương tứ chính (cung đối và hai cung tam hợp).
+**【三方四正飞化路径】**
+化${selectedSiHua.siHua}入${palaceName}后，对其三方四正（对宫、两个三合宫）的联动影响。
 
-**【Ảnh hưởng vận trình hiện tại】**
-Trong khung thời gian ${viewLabel.toLowerCase()}, ${hua} này tác động cụ thể thế nào đến vận gần đây.
+**【当前运势影响】**
+在${viewLabel}时间维度下，此化${selectedSiHua.siHua}对命主近期运势的具体影响。
 
-**【Lời khuyên thực tế】**
-Lời khuyên cụ thể, có thể hành động dựa trên tứ hóa này.`;
+**【实际建议】**
+基于此四化的具体可操作建议。`;
 
-    setSuggestion({ label: `Luận giải ${viewLabel}: ${star} ${hua}`, prompt });
+    sendMessage(prompt, true);
   }, [selectedSiHua]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const streamResponse = async (apiMessages: { role: 'user' | 'assistant'; content: string }[]) => {
@@ -314,48 +307,64 @@ Lời khuyên cụ thể, có thể hành động dựa trên tứ hóa này.`;
       const res = await fetch('/api/interpret', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chart, messages: apiMessages, sessionId: sessionId.current }),
+        body: JSON.stringify({ chart, messages: apiMessages }),
       });
       if (res.status === 404) throw new Error('api-missing');
-      if (!res.ok) {
-        const detail = await res.json().catch(() => null) as { error?: string } | null;
-        throw new Error(detail?.error ? `server:${detail.error}` : 'request-failed');
-      }
-      if (!res.body) throw new Error('no-stream');
+      if (!res.ok) throw new Error('Yêu cầu thất bại');
+      if (!res.body) throw new Error('Không có luồng phản hồi');
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let assistantText = '';
-      let buffer = ''; // giữ lại dòng SSE chưa trọn giữa hai lần read()
+      let textStarted = false;
 
-      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+      setIsThinking(true);
+      setThinkingText('');
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-        for (const line of lines) {
+        const chunk = decoder.decode(value, { stream: true });
+        for (const line of chunk.split('\n')) {
           if (!line.startsWith('data: ')) continue;
           const data = line.slice(6);
           if (data === '[DONE]') break;
           try {
-            const delta = JSON.parse(data).delta?.text ?? '';
-            assistantText += delta;
-            setMessages(prev => {
-              const updated = [...prev];
-              updated[updated.length - 1] = { role: 'assistant', content: assistantText };
-              return updated;
-            });
+            const parsed = JSON.parse(data);
+            if (parsed.delta?.thinking !== undefined) {
+              setThinkingText(prev => prev + parsed.delta.thinking);
+            } else if (parsed.delta?.text) {
+              if (!textStarted) {
+                textStarted = true;
+                setIsThinking(false);
+                setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+              }
+              assistantText += parsed.delta.text;
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: 'assistant', content: assistantText };
+                return updated;
+              });
+            }
           } catch { /* skip */ }
         }
       }
+
+      // If we never got text (e.g. empty response), add a placeholder
+      if (!textStarted) {
+        setMessages(prev => [...prev, { role: 'assistant', content: '…' }]);
+      }
     } catch (e) {
       const missing = e instanceof Error && e.message === 'api-missing';
-      const serverMsg = e instanceof Error && e.message.startsWith('server:') ? e.message.slice(7) : null;
-      setMessages(prev => [...prev, { role: 'assistant', content: serverMsg ? `⚠ ${serverMsg}` : missing ? 'Bản mã nguồn mở không kèm API luận giải AI (/api/interpret) — bạn cần tự triển khai, xem README phần «Quick start». Việc lập lá số không cần API key.' : 'Luận giải thất bại, vui lòng thử lại sau.' }]);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: missing
+          ? 'Phiên bản mã nguồn mở không có API giải đọc AI (/api/interpret). Bạn cần tự triển khai — xem README "Bắt đầu nhanh".'
+          : 'Giải đọc thất bại, vui lòng thử lại sau.',
+      }]);
     } finally {
+      setIsThinking(false);
+      setThinkingText('');
       setLoading(false);
       loadingRef.current = false;
     }
@@ -367,7 +376,6 @@ Lời khuyên cụ thể, có thể hành động dựa trên tứ hóa này.`;
     setLoading(true);
 
     const userMsg: Message = { role: 'user', content: text, hidden };
-    // Capture current messages synchronously via ref (avoids stale closure)
     const apiMessages = [...messagesRef.current, userMsg].map(m => ({
       role: m.role,
       content: m.content,
@@ -382,12 +390,6 @@ Lời khuyên cụ thể, có thể hành động dựa trên tứ hóa này.`;
     if (loadingRef.current) return;
     setActiveTopic(topicKey);
     sendMessage(TOPIC_PROMPTS[topicKey], true);
-  };
-
-  const handleSuggestionClick = () => {
-    if (!suggestion || loadingRef.current) return;
-    sendMessage(suggestion.prompt, true);
-    setSuggestion(null);
   };
 
   const handleSend = () => {
@@ -424,11 +426,19 @@ Lời khuyên cụ thể, có thể hành động dựa trên tứ hóa này.`;
       {/* ── Messages ── */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4 min-h-0">
 
-        {/* Empty state — nothing is generated until the user asks */}
-        {messages.length === 0 && (
+        {/* Initial loading state — before any message or thinking */}
+        {messages.length === 0 && !isThinking && loading && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="text-4xl mb-3" style={{ color: 'var(--t-gold)', opacity: 0.1 }}>✦</div>
-            <p className="text-[10px]" style={{ color: 'var(--t-faint)' }}>Chọn một chủ đề ở trên hoặc đặt câu hỏi để bắt đầu luận giải.</p>
+            <p className="text-[10px] animate-pulse" style={{ color: 'var(--t-faint)' }}>Đang khởi tạo giải đọc…</p>
+          </div>
+        )}
+
+        {/* Empty state before first load */}
+        {messages.length === 0 && !loading && (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="text-4xl mb-3" style={{ color: 'var(--t-gold)', opacity: 0.1 }}>✦</div>
+            <p className="text-[10px]" style={{ color: 'var(--t-faint)' }}>Lập lá số để xem giải đọc</p>
           </div>
         )}
 
@@ -458,7 +468,6 @@ Lời khuyên cụ thể, có thể hành động dựa trên tứ hóa này.`;
               );
             }
 
-            // Assistant message
             const isLastMsg = i === messages.length - 1;
             return (
               <motion.div
@@ -471,48 +480,28 @@ Lời khuyên cụ thể, có thể hành động dựa trên tứ hóa này.`;
                   style={{ color: 'var(--t-faint)' }}
                 >
                   <span style={{ color: 'var(--t-gold)', opacity: 0.4 }}>✦</span>
-                  Luận giải
+                  Giải đọc mệnh lý
                 </div>
                 <AiContent text={msg.content} streaming={loading && isLastMsg} />
               </motion.div>
             );
           })}
         </AnimatePresence>
+
+        {/* Thinking indicator — shown while AI is in thinking phase */}
+        {isThinking && <ThinkingBlock text={thinkingText} />}
+
       </div>
 
       {/* ── Input ── */}
       <div className="flex-shrink-0 px-3 pb-3 pt-2" style={{ borderTop: '1px solid var(--t-border)' }}>
-        {suggestion && (
-          <div className="flex items-center gap-1.5 mb-2">
-            <button
-              onClick={handleSuggestionClick}
-              disabled={loading}
-              className="flex-1 min-w-0 truncate text-left px-2.5 py-1.5 rounded-lg text-[10px] transition-all disabled:opacity-40"
-              style={{
-                background: 'rgba(212,168,67,0.08)',
-                border: '1px dashed rgba(212,168,67,0.3)',
-                color: 'var(--t-gold)',
-              }}
-            >
-              ✦ {suggestion.label}
-            </button>
-            <button
-              onClick={() => setSuggestion(null)}
-              aria-label="Bỏ gợi ý"
-              className="px-1.5 text-[11px]"
-              style={{ color: 'var(--t-faint)' }}
-            >
-              ×
-            </button>
-          </div>
-        )}
         <div className="flex gap-2">
           <input
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder="Hỏi thêm, ví dụ: Năm nay có nên đổi việc không?"
+            placeholder="Hỏi thêm, ví dụ: Năm nay có hợp đổi việc không?"
             disabled={loading}
             className="flex-1 rounded-lg px-3 py-2 text-[11px] focus:outline-none transition-colors"
             style={{
@@ -531,7 +520,7 @@ Lời khuyên cụ thể, có thể hành động dựa trên tứ hóa này.`;
               color: 'var(--t-gold)',
             }}
           >
-            {loading ? '…' : 'Hỏi'}
+            {loading ? '…' : 'Hỏi thêm'}
           </button>
         </div>
       </div>
