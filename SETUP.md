@@ -6,13 +6,13 @@
 
 ## Prerequisites
 
-| Tool | Version | Notes |
-|------|---------|-------|
-| Node.js | ≥ 20 | `node --version` |
-| npm | ≥ 10 | Bundled with Node 20 |
-| Git | any | For cloning |
-| Claude CLI (`claude`) | latest | For AI interpretation — local, uses your subscription |
-| Docker + docker compose | any | Optional — only if you want Langfuse tracing (see below) |
+| Tool                    | Version | Notes                                                     |
+| ----------------------- | ------- | --------------------------------------------------------- |
+| Node.js                 | ≥ 20   | `node --version`                                        |
+| npm                     | ≥ 10   | Bundled with Node 20                                      |
+| Git                     | any     | For cloning                                               |
+| Claude CLI (`claude`) | latest  | For AI interpretation — local, uses your subscription    |
+| Docker + docker compose | any     | Optional — only if you want Langfuse tracing (see below) |
 
 Install Claude CLI if you haven't:
 
@@ -53,12 +53,12 @@ That line is already set. You can run the app immediately without touching anyth
 
 The app supports four AI providers. **For local/personal use, pick one of the first two — they use your existing CLI subscription, not a paid API key:**
 
-| Provider | How it works | Setup |
-|----------|-------------|-------|
+| Provider                                | How it works                                            | Setup                                                                                 |
+| --------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `claude-code` **(recommended)** | Calls the `claude` CLI you installed in Prerequisites | Make sure `claude` is in your `$PATH` and you're logged in (`claude --version`) |
-| `codex` | Calls the `codex` CLI | Install and log in: `npm install -g @openai/codex` |
-| `zai` | Z.ai GLM API (pays per token) | Set `ZAI_API_KEY=` in `.env.local` |
-| `anthropic` | Anthropic Claude API (pays per token) | Set `ANTHROPIC_API_KEY=` in `.env.local` |
+| `codex`                               | Calls the `codex` CLI                                 | Install and log in: `npm install -g @openai/codex`                                  |
+| `zai`                                 | Z.ai GLM API (pays per token)                           | Set `ZAI_API_KEY=` in `.env.local`                                                |
+| `anthropic`                           | Anthropic Claude API (pays per token)                   | Set `ANTHROPIC_API_KEY=` in `.env.local`                                          |
 
 > **Do not set `ANTHROPIC_API_KEY` or any other commercial key** unless you intend to pay for requests. The `claude-code` provider uses your subscription (zero extra cost).
 
@@ -146,13 +146,13 @@ The open-source repo contains the charting engine and a demo UI. These are **not
 
 ## 7. Useful Scripts
 
-| Command | What it does |
-|---------|-------------|
-| `npm run dev` | Start dev server on port 3000 |
-| `npm run build` | Production build |
-| `npm run start` | Serve production build |
+| Command               | What it does                    |
+| --------------------- | ------------------------------- |
+| `npm run dev`       | Start dev server on port 3000   |
+| `npm run build`     | Production build                |
+| `npm run start`     | Serve production build          |
 | `npm run typecheck` | Full TypeScript check (no emit) |
-| `npm test` | Run all regression tests |
+| `npm test`          | Run all regression tests        |
 
 ---
 

@@ -1,8 +1,11 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import ReadingPending from './ReadingPending';
+import { readAnswer } from '@/lib/ai/read-answer';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ZiweiChart, Palace } from '@/lib/ziwei/types';
 import type { TimeView } from './TimeNav';
+import { viPalace, viStar, viSiHua } from '@/lib/i18n/vi';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -32,116 +35,12 @@ const TOPICS = [
 ] as const;
 
 const TOPIC_PROMPTS: Record<string, string> = {
-  overview: `Dựa vào lá số và tư liệu dataset, hãy luận giải tổng quan mệnh cách theo cấu trúc sau:
-
-**【Định tính mệnh cách】**
-Một câu tóm tắt cốt lõi cách cục và khí chất của mệnh chủ.
-
-**【Giải đọc chủ tinh】**
-Đặc tính cốt lõi của chủ tinh tọa cung Mệnh — dẫn chứng nguyên văn hoặc quan điểm Nghê Hải Hạ.
-
-**【Tam phương tứ chính】**
-Phân tích liên hoàn ba cung Tài, Quan, Thiên Di và cách cục tổng thể.
-
-**【Đại hạn hiện tại】**
-Hướng vận đại hạn hiện tại và điều cần chú ý nhất.
-
-**【Ưu thế và lưu ý】**
-Thiên phú của lá số và những rủi ro hoặc bài học cần chú ý.`,
-
-  love: `Dựa vào lá số và tư liệu dataset, hãy phân tích sâu về tình duyên hôn nhân theo cấu trúc sau:
-
-**【Cách cục tình duyên】**
-Một câu định tính cách cục tình duyên của lá số.
-
-**【Phân tích cung Phu Thê】**
-Chủ tinh, tứ hóa cung Phu Thê và cách giải đọc cụ thể trong hệ thống Nghê Hải Hạ.
-
-**【Tam phương liên hoàn】**
-Ảnh hưởng của các cung liên quan đến tình duyên.
-
-**【Tình duyên đại hạn hiện tại】**
-Hướng tình duyên 10 năm hiện tại và những thời điểm then chốt.
-
-**【Lời khuyên thực tế】**
-Lời khuyên tình duyên cụ thể, có thể thực hiện được.`,
-
-  career: `Dựa vào lá số và tư liệu dataset, hãy phân tích sâu về sự nghiệp theo cấu trúc sau:
-
-**【Cách cục sự nghiệp】**
-Một câu định tính cách cục sự nghiệp — hợp đi làm hay tự kinh doanh.
-
-**【Phân tích cung Quan Lộc】**
-Chủ tinh, tứ hóa cung Quan Lộc và nhận định của Nghê Hải Hạ về cấu hình này.
-
-**【Liên hoàn cung Tài Bạch】**
-Mối quan hệ tài vận và sự nghiệp, phân tích nguồn thu.
-
-**【Sự nghiệp đại hạn hiện tại】**
-Hướng sự nghiệp 10 năm hiện tại.
-
-**【Lời khuyên thực tế】**
-Hướng đi, ngành nghề và chiến lược phù hợp.`,
-
-  wealth: `Dựa vào lá số và tư liệu dataset, hãy phân tích sâu về tài vận theo cấu trúc sau:
-
-**【Cách cục tài vận】**
-Một câu định tính mô hình tài vận — tài chủ động hay bị động.
-
-**【Phân tích cung Tài Bạch】**
-Chủ tinh, tứ hóa cung Tài Bạch, nguồn tài và cách vận hành dòng tiền.
-
-**【Cung Điền Trạch (kho tài)】**
-Khả năng tích lũy và vận bất động sản.
-
-**【Tài vận đại hạn hiện tại】**
-Hướng tài vận hiện tại và những điều cần lưu ý.
-
-**【Lời khuyên tài chính】**
-Lời khuyên tài chính cụ thể.`,
-
-  health: `Dựa vào lá số và tư liệu dataset, hãy phân tích sức khỏe theo cấu trúc sau:
-
-**【Chủ tinh cung Tật Ách】**
-Các sao cung Tật Ách và ý nghĩa sức khỏe.
-
-**【Rủi ro chính】**
-Kết hợp lý thuyết Tý Ngọ Lưu Chú của Nghê Hải Hạ, phân tích ẩn họa sức khỏe và bộ phận cần chú ý.
-
-**【Xu hướng sức khỏe đại hạn】**
-Xu hướng sức khỏe hiện tại và những thời điểm quan trọng.
-
-**【Lời khuyên phòng ngừa】**
-Những điều cụ thể cần chú ý và hướng dưỡng sinh.`,
-
-  personality: `Dựa vào lá số và tư liệu dataset, hãy phân tích sâu về tính cách theo cấu trúc sau:
-
-**【Tính cách chủ tinh cung Mệnh】**
-Đặc tính tính cách cốt lõi của chủ tinh cung Mệnh — dẫn nguyên văn Nghê Hải Hạ.
-
-**【Tổng hợp tam phương】**
-Ảnh hưởng của Tài, Quan, Thiên Di đến tính cách — tranh toàn cảnh.
-
-**【Mô hình quan hệ】**
-Cách tương tác với người khác, phong cách ứng xử.
-
-**【Ưu thế và bài học cuộc đời】**
-Thiên phú bẩm sinh và những bài học cuộc đời cần đối mặt.`,
-};
-
-const PALACE_ROLES: Record<string, string> = {
-  '命宫':   '自我、性格、先天格局',
-  '兄弟宫': '兄弟关系、合伙人',
-  '夫妻宫': '感情关系、婚姻状态',
-  '子女宫': '子女缘分、下属关系',
-  '财帛宫': '财运来源、收入方式',
-  '疾厄宫': '身体健康、意外',
-  '迁移宫': '外出机遇、人际格局',
-  '交友宫': '朋友圈、贵人、小人',
-  '官禄宫': '事业成就、社会地位',
-  '田宅宫': '不动产、家庭环境',
-  '福德宫': '精神享受、内心福分',
-  '父母宫': '父母关系、文书契约',
+  overview: 'Lá số ghi nhận những gì tại cung Mệnh? Đoạn tổng quan của Dataset v4 diễn giải những điểm nào?',
+  love: 'Cung Phu Thê có những sao nào? Dataset v4 diễn giải thế nào về tình cảm và hôn nhân của lá số này?',
+  career: 'Cung Quan Lộc có những sao nào? Dataset v4 nêu những nhận định nào về sự nghiệp của lá số này?',
+  wealth: 'Cung Tài Bạch có những sao nào? Dataset v4 diễn giải ra sao về tài vận của lá số này?',
+  health: 'Cung Tật Ách ghi nhận những sao nào? Hãy dịch các ý về sức khỏe mà Dataset v4 nêu trực tiếp.',
+  personality: 'Dataset v4 mô tả tính cách ra sao? Những sao nào thực sự tọa cung Mệnh trên lá số?',
 };
 
 /** Render AI markdown: **【Title】** → gold header, **bold** → strong */
@@ -182,45 +81,11 @@ function AiContent({ text, streaming }: { text: string; streaming?: boolean }) {
   );
 }
 
-function ThinkingBlock({ text }: { text: string }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mb-3"
-    >
-      <div
-        className="text-[9px] tracking-widest mb-1.5 flex items-center gap-1.5"
-        style={{ color: 'var(--t-faint)' }}
-      >
-        <span className="animate-pulse" style={{ color: 'var(--t-gold)', opacity: 0.5 }}>✦</span>
-        Đang phân tích lá số…
-      </div>
-      {text && (
-        <div
-          className="relative rounded-lg px-2.5 py-2 max-h-16 overflow-hidden"
-          style={{ background: 'rgba(212,168,67,0.04)', border: '1px solid rgba(212,168,67,0.1)' }}
-        >
-          <p className="text-[9px] leading-relaxed break-words" style={{ color: 'var(--t-faint)', fontStyle: 'italic' }}>
-            {text.slice(-400)}
-          </p>
-          <div
-            className="absolute bottom-0 left-0 right-0 h-5 rounded-b-lg"
-            style={{ background: 'linear-gradient(to bottom, transparent, var(--t-card, #0a0a0a))' }}
-          />
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
 export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: InsightPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeTopic, setActiveTopic] = useState<string>('overview');
-  const [thinkingText, setThinkingText] = useState('');
-  const [isThinking, setIsThinking] = useState(false);
   const messagesRef = useRef<Message[]>([]);
   const loadingRef = useRef(false);
   const lastPalaceBranch = useRef<number | undefined>(undefined);
@@ -234,31 +99,14 @@ export default function InsightPanel({ chart, selectedPalace, selectedSiHua }: I
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, thinkingText]);
+  }, [messages]);
 
   useEffect(() => {
     if (!selectedPalace || selectedPalace.branch === lastPalaceBranch.current) return;
     lastPalaceBranch.current = selectedPalace.branch;
 
-    const majorStars = selectedPalace.stars.filter(s => s.type === 'major');
-    const starDesc = majorStars.length > 0
-      ? majorStars.map(s => `${s.name}${s.siHua ? ' Hóa ' + s.siHua : ''}`).join(', ')
-      : 'không chủ tinh (mượn đối cung)';
-    const role = PALACE_ROLES[selectedPalace.name] ?? '';
-
-    const prompt = `Dựa vào lá số và tư liệu dataset, hãy phân tích trọng tâm【${selectedPalace.name}】（chủ quản: ${role}）, chủ tinh cung này là ${starDesc}. Xuất theo cấu trúc sau:
-
-**【Định tính cung vị】**
-Ý nghĩa của ${selectedPalace.name} trong lá số và nhận định tổng thể về cấu hình sao này.
-
-**【Giải đọc chủ tinh】**
-Giải đọc chủ tinh tại cung này theo hệ thống Nghê Hải Hạ — dẫn quan điểm cụ thể.
-
-**【Liên hoàn tam phương tứ chính】**
-Ảnh hưởng của các cung tam phương tứ chính đến cung ${selectedPalace.name}.
-
-**【Lời khuyên thực tế】**
-Lời khuyên cụ thể dựa trên cung này.`;
+    const palaceName = viPalace(selectedPalace.name);
+    const prompt = `Cung ${palaceName} có những sao nào trên lá số? Dataset v4 trực tiếp diễn giải gì về cung này?`;
 
     sendMessage(prompt, true);
   }, [selectedPalace]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -272,25 +120,9 @@ Lời khuyên cụ thể dựa trên cung này.`;
     const palaceOfStar = chart.palaces.find(p =>
       p.stars.some(s => s.name === selectedSiHua.starName)
     );
-    const palaceName = palaceOfStar?.name ?? 'cung không xác định';
-    const viewLabel = selectedSiHua.view === 'daxian' ? 'Đại hạn' : 'Lưu niên';
-
-    const prompt = `Dựa vào lá số và tư liệu dataset, hãy phân tích ảnh hưởng phi hóa【${viewLabel} ${selectedSiHua.starName} Hóa ${selectedSiHua.siHua}】theo cấu trúc sau:
-
-**【Ý nghĩa cơ bản Hóa ${selectedSiHua.siHua}】**
-Ý nghĩa cốt lõi của Hóa ${selectedSiHua.siHua} trong hệ thống Nghê Hải Hạ và ý nghĩa đặc biệt của ${selectedSiHua.starName} Hóa ${selectedSiHua.siHua}.
-
-**【Ảnh hưởng tại cung】**
-${selectedSiHua.starName} Hóa ${selectedSiHua.siHua} tọa【${palaceName}】— lĩnh vực cung này chủ quản bị ảnh hưởng như thế nào, Nghê sư giải đọc ra sao.
-
-**【Đường phi hóa tam phương tứ chính】**
-Sau khi Hóa ${selectedSiHua.siHua} nhập ${palaceName}, ảnh hưởng liên hoàn đến tam phương tứ chính (đối cung và hai cung tam hợp).
-
-**【Ảnh hưởng vận thế hiện tại】**
-Trong chiều thời gian ${viewLabel}, phi hóa này ảnh hưởng cụ thể thế nào đến vận thế gần đây của mệnh chủ.
-
-**【Lời khuyên thực tế】**
-Lời khuyên cụ thể, có thể thực hiện được dựa trên tứ hóa này.`;
+    const location = palaceOfStar ? ` tại cung ${viPalace(palaceOfStar.name)}` : '';
+    const viewLabel = selectedSiHua.view === 'daxian' ? 'đại hạn' : 'lưu niên';
+    const prompt = `Lá số và Dataset v4 có căn cứ trực tiếp nào về ${viStar(selectedSiHua.starName)} Hóa ${viSiHua(selectedSiHua.siHua)}${location} trong ${viewLabel}?`;
 
     sendMessage(prompt, true);
   }, [selectedSiHua]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -306,47 +138,16 @@ Lời khuyên cụ thể, có thể thực hiện được dựa trên tứ hóa
       if (!res.ok) throw new Error('Yêu cầu thất bại');
       if (!res.body) throw new Error('Không có luồng phản hồi');
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let assistantText = '';
-      let textStarted = false;
-
-      setIsThinking(true);
-      setThinkingText('');
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-          if (data === '[DONE]') break;
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.delta?.thinking !== undefined) {
-              setThinkingText(prev => prev + parsed.delta.thinking);
-            } else if (parsed.delta?.text) {
-              if (!textStarted) {
-                textStarted = true;
-                setIsThinking(false);
-                setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
-              }
-              assistantText += parsed.delta.text;
-              setMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { role: 'assistant', content: assistantText };
-                return updated;
-              });
-            }
-          } catch { /* skip */ }
-        }
+      let answer = '';
+      for await (const delta of readAnswer(res.body)) {
+        answer += delta;
+        if (!answer.trim()) continue;
+        const message: Message = { role: 'assistant', content: answer };
+        setMessages(prev => prev[prev.length - 1]?.role === 'assistant'
+          ? [...prev.slice(0, -1), message]
+          : [...prev, message]);
       }
-
-      // If we never got text (e.g. empty response), add a placeholder
-      if (!textStarted) {
-        setMessages(prev => [...prev, { role: 'assistant', content: '…' }]);
-      }
+      if (!answer.trim()) throw new Error('Phản hồi trống');
     } catch (e) {
       const missing = e instanceof Error && e.message === 'api-missing';
       setMessages(prev => [...prev, {
@@ -356,8 +157,6 @@ Lời khuyên cụ thể, có thể thực hiện được dựa trên tứ hóa
           : 'Giải đọc thất bại, vui lòng thử lại sau.',
       }]);
     } finally {
-      setIsThinking(false);
-      setThinkingText('');
       setLoading(false);
       loadingRef.current = false;
     }
@@ -419,16 +218,8 @@ Lời khuyên cụ thể, có thể thực hiện được dựa trên tứ hóa
       {/* ── Messages ── */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4 min-h-0">
 
-        {/* Initial loading state — before any message or thinking */}
-        {messages.length === 0 && !isThinking && loading && (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="text-4xl mb-3" style={{ color: 'var(--t-gold)', opacity: 0.1 }}>✦</div>
-            <p className="text-[10px] animate-pulse" style={{ color: 'var(--t-faint)' }}>Đang khởi tạo giải đọc…</p>
-          </div>
-        )}
-
         {/* Empty state — prompt user to click a topic or palace */}
-        {messages.length === 0 && !loading && !isThinking && (
+        {messages.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center h-full text-center gap-2 px-4">
             <div className="text-4xl mb-1" style={{ color: 'var(--t-gold)', opacity: 0.08 }}>✦</div>
             <p className="text-[11px] font-medium" style={{ color: 'var(--t-text2)' }}>Chọn chủ đề để xem giải đọc</p>
@@ -484,8 +275,7 @@ Lời khuyên cụ thể, có thể thực hiện được dựa trên tứ hóa
           })}
         </AnimatePresence>
 
-        {/* Thinking indicator — shown while AI is in thinking phase */}
-        {isThinking && <ThinkingBlock text={thinkingText} />}
+        {loading && messages[messages.length - 1]?.role === 'user' && <ReadingPending />}
 
       </div>
 

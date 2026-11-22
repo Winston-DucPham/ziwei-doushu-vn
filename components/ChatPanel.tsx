@@ -1,5 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import ReadingPending from './ReadingPending';
+import { readAnswer } from '@/lib/ai/read-answer';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ZiweiChart } from '@/lib/ziwei/types';
 
@@ -51,34 +53,16 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
       if (!res.ok) throw new Error('Yêu cầu thất bại');
       if (!res.body) throw new Error('Không có luồng phản hồi');
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let assistantText = '';
-
-      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') break;
-            try {
-              const parsed = JSON.parse(data);
-              const delta = parsed.delta?.text ?? '';
-              assistantText += delta;
-              setMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { role: 'assistant', content: assistantText };
-                return updated;
-              });
-            } catch { /* skip */ }
-          }
-        }
+      let answer = '';
+      for await (const delta of readAnswer(res.body)) {
+        answer += delta;
+        if (!answer.trim()) continue;
+        const message: Message = { role: 'assistant', content: answer };
+        setMessages(prev => prev[prev.length - 1]?.role === 'assistant'
+          ? [...prev.slice(0, -1), message]
+          : [...prev, message]);
       }
+      if (!answer.trim()) throw new Error('Phản hồi trống');
     } catch (e) {
       const missing = e instanceof Error && e.message === 'api-missing';
       setMessages(prev => [...prev, {
@@ -95,7 +79,7 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
       {/* 标题 */}
       <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--t-border)' }}>
         <h3 className="text-xs font-medium tracking-widest" style={{ color: 'var(--t-gold)' }}>Giải đọc lá số AI</h3>
-        <p className="text-[10px] mt-0.5" style={{ color: 'var(--t-faint)' }}>Hệ thống chính tông Tử Vi của Nghê Hải Hạ</p>
+        <p className="text-[10px] mt-0.5" style={{ color: 'var(--t-faint)' }}>Theo lá số và Dataset v4</p>
       </div>
 
       {/* 消息列表 */}
@@ -143,6 +127,7 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
             </motion.div>
           ))}
         </AnimatePresence>
+        {loading && messages[messages.length - 1]?.role === 'user' && <ReadingPending />}
       </div>
 
       {/* 预设问题 */}

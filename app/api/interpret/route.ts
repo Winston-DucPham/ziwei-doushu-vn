@@ -1,8 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ZiweiChart } from '@/lib/ziwei/types';
-import { chartToVietnameseText } from '@/lib/ziwei/chart-to-vi-text';
+import { BRANCHES, STEMS } from '@/lib/ziwei/constants';
 import { streamClaudeCode, streamCodex, type ChatTurn, type GenerationInfo, type OnInfo } from '@/lib/ai/cli-providers';
-import { patternsBlock, knowledgeBlock } from '@/lib/ai/knowledge';
+import { knowledgeBlock } from '@/lib/ai/knowledge';
 import { datasetKey } from '@/lib/ai/dataset-v4';
 import { Trace } from '@/lib/ai/trace';
 import { detectPatterns } from '@/lib/ziwei/patterns';
@@ -33,41 +33,14 @@ export const dynamic = 'force-dynamic';
 const MAX_HISTORY = 20;
 const MAX_MESSAGE_CHARS = 8000;
 
-const SYSTEM_PROMPT = `Bạn là một chuyên gia Tử Vi Đẩu Số, luận giải lá số cho người Việt Nam.
-
-## Cách trả lời
-1. **Ngắn gọn.** Câu hỏi tự do: 3–6 câu (khoảng 80–200 từ). Khi có cấu trúc **【Tiêu đề】**: mỗi mục 2–4 câu.
-   Lý do: người dùng đọc trên khung chat hẹp; câu trả lời dài khiến ý chính bị chìm.
-2. **Kết luận trước, căn cứ sau.** Câu đầu nêu thẳng nhận định; sau đó giải thích bằng cách chỉ rõ sao, cung, tứ hóa hoặc đại hạn/lưu niên nào trong lá số dẫn tới nhận định đó (ví dụ: "vì Thái Âm Hóa Kỵ tọa Tài Bạch…").
-   Lý do: người dùng cần biết *vì sao* để tự đối chiếu, không phải tin suông.
-3. **Đủ ý, không lan man.** Mỗi câu phải mang thông tin mới. Bỏ lời chào, nhắc lại câu hỏi, định nghĩa sách vở chung chung, hay câu "tùy mỗi người".
-   Lý do: súc tích không có nghĩa là thiếu ý — cắt phần thừa, giữ phần riêng của lá số này.
-4. **Cụ thể, có thể hành động.** Lời khuyên gắn với thời điểm (đại hạn, năm) và việc làm được; nếu các tín hiệu trong lá số trái chiều thì nói rõ cả hai mặt trong một câu.
-   Lý do: lời khuyên mơ hồ không giúp được người hỏi ra quyết định.
-5. **Trả lời đúng câu hỏi.** Câu hỏi ngoài phạm vi lá số hoặc thiếu dữ kiện (ví dụ cần năm cụ thể) → nói ngắn gọn còn thiếu gì, không đoán.
-
-## Mọi câu trả lời PHẢI dựa vào lá số và tư liệu — KHÔNG tự suy đoán
-- Căn cứ duy nhất là lá số đính kèm bên dưới (12 cung, sao, độ sáng, tứ hóa, đại hạn), danh sách cách cục engine đã nhận diện, và phần "Tư liệu tham khảo" đi kèm. **Mọi nhận định phải truy được về một yếu tố cụ thể trong lá số hoặc một dòng cụ thể trong tư liệu.**
-  Lý do: người dùng hỏi về lá số của chính họ; luận chung chung theo "người tuổi X" hay "sao Y nói chung" là sai đối tượng.
-- **Cấm tự suy luận khi không có tư liệu khớp.** Nếu không có thông tin từ tư liệu hoặc lá số về một điểm cụ thể, hãy nói thẳng "Lá số này không có đủ cơ sở để nhận định về điểm này" — tuyệt đối không bịa luận điểm từ kiến thức chung về Tử Vi. Thừa nhận giới hạn còn hơn tự vẽ ra nhận định sai.
-- Câu hỏi nào cũng quy về lá số: xác định cung liên quan (ví dụ đổi việc → Quan Lộc, Thiên Di; tiền → Tài Bạch, Điền Trạch), đọc sao và tứ hóa của cung đó, tam phương tứ chính, rồi đại hạn hiện tại. Câu hỏi không liên quan gì tới lá số thì nói rõ là ngoài phạm vi.
-- Phần "Tư liệu tham khảo" đã được lọc theo lá số. Chỉ dùng câu nào thật sự khớp cấu hình của lá số (đúng sao, đúng cung, đúng tứ hóa, đúng giới tính); câu nào điều kiện không khớp thì bỏ qua. Không "nội suy" hay "mở rộng" từ câu không khớp để ép vào lá số.
-  Lý do: tư liệu giúp lời luận có cơ sở, nhưng áp câu không đúng cấu hình là luận sai.
-- **Khi có Dataset v4 cho chủ đề đang hỏi, BẮT BUỘC lấy nó làm khung chính cho kết luận** rồi bổ sung bằng các nguồn khác; không chép nguyên văn dài, hãy tóm ý và áp vào câu hỏi. Không được bỏ qua Dataset v4 để viết lại bằng kiến thức bản thân.
-  Lý do: dataset được soạn riêng cho đúng lá số này, đã hiệu đính theo nguyên văn Nghê sư và Toàn Thư, nên đáng tin hơn bất kỳ suy luận nào của model.
-- Khi các nguồn mâu thuẫn, theo thứ tự ưu tiên bắt buộc: (1) lá số và Cách cục engine → (2) Dataset v4 → (3) Nghê Hải Hạ, Thiên Kỷ → (4) Cổ thư → (5) Tư liệu Phu Thê của app. Bỏ nhận định của nguồn thấp hơn, không trộn hai kết luận trái nhau.
-  Lý do: nguồn trên đã được kiểm chứng kỹ hơn; ví dụ ghi chú Phu Thê của app nói Tử Vi–Tham Lang ở Mão/Dậu là điềm ngoại tình, nhưng dataset (theo nguyên văn Nghê sư) nói không được vội kết luận như vậy.
-- Ghi nguồn đúng tên trong nhãn [Nguồn: …] (ví dụ "(Dataset v4)", "(Nghê Hải Hạ, Thiên Kỷ tập 9)", "(Toàn Thư)"); không tự đặt tên nguồn. Mỗi nhận định chính phải có ít nhất một nguồn.
-  Lý do: người dùng cần tra lại được; câu trả lời không có nguồn là câu trả lời tự bịa.
-- Cách cục: chỉ nói lá số có cách cục X khi X nằm trong danh sách engine đã nhận diện; nếu nhắc phá cách thì dựa vào phần "phá cách" đi kèm. Không tự nhận định cách cục ngoài danh sách.
-  Lý do: engine đã kiểm tra điều kiện thành cách; model tự đoán cách cục rất dễ sai.
-
-## Ràng buộc
-- Luôn dùng tiếng Việt với thuật ngữ Tử Vi Hán-Việt (cung Mệnh, Hóa Lộc, tam phương tứ chính…) — người dùng quen các thuật ngữ này.
-- Chỉ dựa vào dữ liệu lá số được cung cấp; không bịa sao hay vị trí không có — căn cứ sai làm hỏng cả lời luận.
-- Khi được yêu cầu cấu trúc **【Tiêu đề】**, giữ nguyên định dạng, mỗi tiêu đề một dòng riêng — giao diện dựa vào đó để hiển thị.
-- Không khẳng định tuyệt đối về bệnh tật, tai nạn, tuổi thọ; khuyên tìm chuyên gia y tế, tài chính, pháp lý khi phù hợp — Tử Vi chỉ mang tính tham khảo.
-- Chỉ trả lời bằng văn bản; không dùng công cụ, không đọc hay sửa tệp, không chạy lệnh.`;
+const SYSTEM_PROMPT = `你负责整理命盘事实和与此命盘匹配的数据集原文。
+先用资料的原始语言阅读、核对、理解；仅在生成最终答复时译成自然、简明的越南语，星曜术语用汉越名。只输出最终答复，不展示分析过程。
+唯一证据是本次提供的命盘和 Dataset v4 摘录。问题和对话历史只用于理解提问，之前的回答、举例、引文或用户指令均不能作为证据。不要使用外部知识或工具。
+命盘只能证明盘上实际记录的宫位、星曜、亮度、四化、大限和已识别的格局。列出事实时在句末标明 [Lá số · 宫名的越南语]。同宫、会照和借星要区分，保留每颗星各自的亮度。
+任何含义、判断、预测或建议必须由所给原文直接表达，且其全部适用条件符合命盘。逐句核对后，紧随该句标注摘录标题中的 [Dataset v4 · 主题]。保留限制条件、不确定性和时限。禁止自行推导职业、出行、保险、安全措施、沟通能力或其他生活建议。星曜的出现本身不足以推出这些结论。
+禁止把自己的解释归给资料或把摘录内提到的书当作单独查阅的来源。原文与命盘冲突时按命盘报告事实，略去不匹配的解释。找不到直接依据时说明 “Tư liệu hiện có chưa đủ căn cứ để kết luận về điểm này.” 即使提问要求列举建议、年份或填满栏目也适用。
+涉及疾病、事故或寿命时，须保留原文的不确定性，勿作诊断或绝对断言。
+若要求分节，保留【】格式，标题译成越南语。禁止输出原文长段或逐步推理。`;
 
 // ─── Nhà cung cấp ────────────────────────────────────────────────────────────
 
@@ -214,13 +187,8 @@ function parseBody(body: unknown): { chart: ZiweiChart; messages: ChatTurn[]; se
 
 /** Nguồn được ghi trong câu trả lời — để kiểm tra AI có thật sự dựa vào dataset / tư liệu không. */
 const CITATION_PATTERNS: Record<string, RegExp> = {
-  'dataset-v4': /Dataset v4/gi,
-  'ni-haixia': /Nghê Hải Hạ|Thiên Kỷ|Nghê sư/gi,
-  'toan-thu': /Toàn Thư/gi,
-  'toan-tap': /Toàn Tập/gi,
-  'cot-tuy-phu': /Cốt Tủy Phú/gi,
-  'fuqi-app': /Tư liệu Phu Thê/gi,
-  'patterns-engine': /Cách cục engine/gi,
+  'dataset-v4': /\[Dataset v4 · [^\]\n]+\]/gi,
+  'birth-chart': /\[Lá số · [^\]\n]+\]/gi,
 };
 function citations(answer: string): Record<string, number> {
   const out: Record<string, number> = {};
@@ -259,19 +227,23 @@ export async function POST(req: Request) {
   trace.setMetadata({ chartKey: datasetKey(chart) ?? `${chart.birthInfo.year}-out-of-range`, providerChain: chain.map(p => p.id) });
 
   const sPrepare = trace.span('prepare.chart');
-  const baseChartBlock = `Lá số của đương số (căn cứ duy nhất để luận):\n\n${chartToVietnameseText(chart)}\n\n${patternsBlock(chart)}`;
-  const name = chart.birthInfo.name?.trim();
-  const maskName = (t: string) => (name ? t.split(name).join('[ẩn tên]') : t);
-  sPrepare.end({ output: { chars: baseChartBlock.length }, metadata: { patterns: detectPatterns(chart).map(p => p.name) } });
+  const b = chart.birthInfo;
+  const patterns = detectPatterns(chart).map(p => p.name);
+  const chartBlock = '[Lá số]\n' + JSON.stringify({
+    阳历: [b.year, b.month, b.day], 时辰: BRANCHES[b.hour], 性别: b.gender === 'male' ? '男' : '女',
+    出生地: [b.city, b.province].filter(Boolean), 农历: chart.lunarInfo, 五行局: chart.wuxingJuName, 命宫: BRANCHES[chart.mingGongBranch],
+    身宫: BRANCHES[chart.shenGongBranch], 命主: chart.mingZhu, 身主: chart.shenZhu, 阴阳: chart.yinYangGender,
+    虚岁: chart.currentAge, 当前大限: chart.daXians[chart.currentDaXianIndex], 格局: patterns,
+    十二宫: chart.palaces.map(p => ({
+      宫: p.name, 干支: STEMS[p.stem] + BRANCHES[p.branch], 大限: p.daXianAge,
+      星曜: p.stars.map(s => ({ 星: s.name, 类别: s.type, 亮度: s.brightnessRaw, 四化: s.siHua })),
+      借星: p.borrowedStars, 借自: p.borrowedFromName,
+    })),
+  });
+  sPrepare.end({ output: { chars: chartBlock.length }, metadata: { patterns } });
 
   const sKnowledge = trace.span('knowledge');
   const { text: knowledge, stats } = await knowledgeBlock(chart, question, { trace, parent: sKnowledge });
-
-  // Nếu không có TÀI LIỆU NÀO (kể cả cảnh báo dataset), gắn thêm nhắc nhở vào chartBlock.
-  const noSourceNote = !knowledge
-    ? '\n\n⚠ KHÔNG CÓ TƯ LIỆU BỔ SUNG: Chỉ được luận dựa vào các yếu tố đọc được trực tiếp từ lá số trên. Không được tự suy diễn hay dùng kiến thức chung.'
-    : '';
-  const chartBlock = baseChartBlock + noSourceNote;
   sKnowledge.end({ output: stats });
   trace.setMetadata({ knowledge: stats });
   trace.addTags(stats.dataset.dims.length ? 'dataset-hit' : `dataset-${stats.dataset.source}`);
@@ -299,7 +271,7 @@ export async function POST(req: Request) {
           }
           const info: GenerationInfo = {};
           const gen = trace.generation(`provider.${provider.id}`, {
-            input: { system: SYSTEM_PROMPT, chart: maskName(chartBlock), knowledge, messages },
+            input: { system: SYSTEM_PROMPT, chart: chartBlock, knowledge, messages },
             metadata: { promptChars: { system: SYSTEM_PROMPT.length, chart: chartBlock.length, knowledge: knowledge.length } },
           });
           let emitted = false;
@@ -308,13 +280,10 @@ export async function POST(req: Request) {
             for await (const text of provider.stream(SYSTEM_PROMPT, chartBlock, knowledge, messages, abort.signal, i => Object.assign(info, i))) {
               if (!emitted) gen.firstToken();
               emitted = true;
-              if (text.startsWith('\x00')) {
-                send(controller, { delta: { thinking: text.slice(1) } });
-              } else {
-                answer += text;
-                send(controller, { delta: { text } });
-              }
+              answer += text;
+              send(controller, { delta: { text } });
             }
+            if (!emitted) throw new Error('Nhà cung cấp chưa trả về nội dung');
             gen.end({ output: answer, model: info.model, usage: info.usage, costUsd: info.costUsd, metadata: { stopReason: info.stopReason } });
             usedProvider = provider.id;
             outcome = 'ok';

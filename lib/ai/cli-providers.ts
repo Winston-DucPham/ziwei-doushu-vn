@@ -141,9 +141,8 @@ export async function* streamClaudeCode(
   let resultError: string | null = null;
   for await (const ev of runJsonl(process.env.CLAUDE_CODE_BIN || 'claude', args, transcriptPrompt(messages), signal)) {
     if (ev.type === 'stream_event') {
-      const e = ev.event as { type?: string; delta?: { type?: string; text?: string; thinking?: string } } | undefined;
+      const e = ev.event as { type?: string; delta?: { type?: string; text?: string } } | undefined;
       if (e?.type === 'content_block_delta' && e.delta?.type === 'text_delta' && e.delta.text) yield e.delta.text;
-      if (e?.type === 'content_block_delta' && e.delta?.type === 'thinking_delta' && e.delta.thinking) yield '\x00' + e.delta.thinking;
     } else if (ev.type === 'system' && ev.subtype === 'init' && typeof ev.model === 'string') {
       onInfo?.({ model: ev.model });
     } else if (ev.type === 'result') {
@@ -193,8 +192,8 @@ export async function* streamCodex(
   let sent = 0;
   let failure: string | null = null;
   for await (const ev of runJsonl(process.env.CODEX_BIN || 'codex', args, prompt, signal)) {
-    const item = ev.item as { type?: string; text?: string } | undefined;
-    if (ev.type === 'item.completed' && item?.type === 'agent_message' && item.text) {
+    const item = ev.item as { type?: string; text?: string; phase?: string } | undefined;
+    if (ev.type === 'item.completed' && item?.type === 'agent_message' && item.phase !== 'commentary' && item.text) {
       yield (sent++ ? '\n\n' : '') + item.text;
     } else if (ev.type === 'turn.completed') {
       const u = ev.usage as Record<string, number> | undefined;
