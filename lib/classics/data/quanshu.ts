@@ -11,8 +11,11 @@ export const ziWeiQuanShu: Book = {
   title: '紫微斗数全书',
   slug: 'quanshu',
   dynasty: '明代',
+  dynasty_vi: 'Thời Minh',
   author: '罗洪先 编',
+  author_vi: 'La Hồng Tiên biên soạn',
   intro: '紫微斗数最系统的古籍，强调十二宫与四化的关系。是清代以降紫微学者的主要教材。',
+  intro_vi: 'Cổ tịch hệ thống nhất về Tử Vi Đẩu Số, chú trọng mối quan hệ giữa thập nhị cung và tứ hóa. Giáo trình chủ yếu cho học giả Tử Vi từ thời Thanh về sau.',
   wordCount: 100000,
   chapters: [
     {

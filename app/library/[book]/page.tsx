@@ -44,13 +44,13 @@ export default async function BookPage({ params }: { params: Promise<{ book: str
         {/* Thông tin sách */}
         <div className="text-center mb-12">
           <div style={{ fontSize: '11px', color: 'var(--tx-3)', letterSpacing: '0.3em', marginBottom: '8px' }}>
-            {book.dynasty} · {book.author}
+            {book.dynasty_vi ?? book.dynasty} · {book.author_vi ?? book.author}
           </div>
           <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', fontWeight: 700, color: 'var(--tx-0)', letterSpacing: '0.15em', marginBottom: '14px' }}>
             《{book.title}》
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--tx-2)', lineHeight: 1.8, maxWidth: '500px', margin: '0 auto' }}>
-            {book.intro}
+            {book.intro_vi ?? book.intro}
           </p>
         </div>
 

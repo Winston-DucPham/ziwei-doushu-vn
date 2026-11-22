@@ -11,8 +11,11 @@ export const guSuiFu: Book = {
   title: '骨髓赋',
   slug: 'gusuifu',
   dynasty: '明代',
+  dynasty_vi: 'Thời Minh',
   author: '紫微斗数古籍传承（无确切作者）',
+  author_vi: 'Truyền thừa cổ tịch Tử Vi Đẩu Số (không rõ tác giả)',
   intro: '紫微斗数最浓缩的核心口诀，全文约 1500 字。倪海厦《天纪》中多次援引此赋，是紫微学者必读经典。',
+  intro_vi: 'Khẩu quyết cốt lõi súc tích nhất của Tử Vi Đẩu Số, toàn văn khoảng 1500 chữ. Nghê Hải Hạ nhiều lần dẫn chứng phú này trong Thiên Kỷ — tác phẩm bắt buộc phải đọc với người học Tử Vi.',
   wordCount: 1500,
   chapters: [
     {

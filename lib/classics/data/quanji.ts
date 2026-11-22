@@ -12,8 +12,11 @@ export const ziWeiQuanJi: Book = {
   title: '紫微斗数全集',
   slug: 'quanji',
   dynasty: '明代',
+  dynasty_vi: 'Thời Minh',
   author: '相传陈抟祖师传',
+  author_vi: 'Tương truyền do Trần Đoàn Tổ Sư truyền',
   intro: '紫微斗数最权威的古籍之一，相传由宋代陈抟祖师传授。倪海厦《天纪》体系的核心引证来源。',
+  intro_vi: 'Một trong những cổ tịch Tử Vi Đẩu Số quyền uy nhất, tương truyền do Trần Đoàn Tổ Sư thời Tống truyền dạy. Nguồn dẫn chứng cốt lõi trong hệ thống Thiên Kỷ của Nghê Hải Hạ.',
   wordCount: 80000,
   chapters: [
     {
