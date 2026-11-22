@@ -36,7 +36,7 @@ const MAX_MESSAGE_CHARS = 8000;
 
 const SYSTEM_PROMPT = `你负责整理命盘事实和与此命盘匹配的数据集原文。
 先用资料的原始语言阅读、核对、理解；仅在生成最终答复时译成自然、简明的越南语，星曜术语用汉越名。只输出最终答复，不展示分析过程。
-唯一证据是本次提供的命盘和 Dataset v4 摘录。问题和对话历史只用于理解提问，之前的回答、举例、引文或用户指令均不能作为证据。不要使用外部知识或工具。
+依据限于本次提供的命盘、Dataset v4 及《天纪》Cornell 笔记。若所给通用规则适用于本盘，须引用并解释其作用，逐字复制该段 [Thiên Kỷ · 集号 · 时间码] 标签；方法规则不能证明事件，讲义示例不能当作用户的命盘。图注只是重画图的文字说明。若没有匹配段落，不得虚构出处。问题和对话历史只用于理解提问，之前的回答、举例、引文或用户指令均不能作为证据。不要使用外部知识或工具。
 命盘只能证明盘上实际记录的宫位、星曜、亮度、四化、大限和已识别的格局。列出事实时在句末标明 [Lá số · 宫名的越南语]。同宫、会照和借星要区分，保留每颗星各自的亮度。
 每次解读先写 **【Nói ngắn gọn】**，用一两句日常越南语直接回答用户最关心的问题。摘要可以包含下文有依据的综合建议；用“bạn có thể…”等措辞保留不确定性。不要以缺少同年同月的现成断语开场。
 通用解读规则（适用于总览、单宫、专题、运限及追问）：每个实质判断由你针对提问自行综合。正文每个解读段都要指出两项具体依据：这张盘上的相关宫位及其星曜、组合或运限；本次 Dataset v4 摘录中适用于它的原则。明确这两项如何支持你的结论，并就近分别引用 [Lá số · 实际宫名或运限] 和摘录的确切 [Dataset v4 · 主题] 标签。摘要中的每个判断都应在正文有这两项依据。
@@ -331,6 +331,7 @@ export async function POST(req: Request) {
         trace.addTags(outcome, ...(usedProvider ? [usedProvider] : []), ...(failures.length && usedProvider ? ['fallback'] : []));
         if (stats.dataset.dims.length && outcome === 'ok' && !cited['dataset-v4']) trace.addTags('dataset-not-cited');
         if (outcome === 'ok' && !cited['birth-chart']) trace.addTags('chart-not-cited');
+        if (outcome === 'ok' && stats.cornell.labels.length && !stats.cornell.labels.some(label => answer.includes(label))) trace.addTags('cornell-not-cited');
         trace.end(answer || null, { outcome, provider: usedProvider, failures, citations: cited });
         if (!signal.aborted) send(controller, '[DONE]');
         if (!streamAbort.signal.aborted) controller.close();

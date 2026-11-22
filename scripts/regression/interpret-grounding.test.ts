@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, symlink, readFile, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import Module from 'node:module';
 import path from 'node:path';
@@ -9,6 +9,7 @@ async function main() {
   const cwd = process.cwd();
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'ziwei-interpret-test-'));
   try {
+    await symlink(path.join(cwd, 'research'), path.join(tmp, 'research'), 'dir');
     process.chdir(tmp);
     Object.assign(process.env, {
       AI_PROVIDER: 'claude-code', AI_FALLBACK: '', TRACE_FILE: '0',
@@ -29,6 +30,8 @@ assert.ok(chart.十二宫.every(p => /[一-龥]/.test(p.宫) && Array.isArray(p.
 if (chart.阳历[0] === 1990) {
   assert.ok(prompt.includes('[Dataset v4 · Thiên di]\\n此为迁移宫测试原文。'));
 } else {
+  assert.ok(prompt.includes('[Thiên Kỷ · P37 · 00:36:28]'));
+  assert.ok(prompt.includes('起斗君用出生的月和时'));
   assert.equal(chart.所问流月.年, 2026);
   assert.equal(chart.所问流月.月, 9);
   assert.equal(chart.所问流月.月干, '戊');

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, symlink, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { generateChart } from '../../lib/ziwei/algorithm';
@@ -8,6 +8,7 @@ async function main() {
   const cwd = process.cwd();
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'ziwei-general-'));
   try {
+    await symlink(path.join(cwd, 'research'), path.join(tmp, 'research'), 'dir');
     process.chdir(tmp);
     const { DATASET_DIMS, datasetKey } = await import('../../lib/ai/dataset-v4');
     const { knowledgeBlock } = await import('../../lib/ai/knowledge');
@@ -23,7 +24,7 @@ async function main() {
     for (const question of ['tháng 9 âm tôi cần lưu ý điều gì', 'Con đường sắp tới của tôi thế nào?']) {
       const { stats, text } = await knowledgeBlock(chart, question);
       assert.deepEqual(stats.dataset.dims, [...DATASET_DIMS]);
-      assert.ok(text.length <= 8000);
+      assert.ok(stats.dataset.chars <= 8000);
       for (const dim of DATASET_DIMS) assert.ok(text.includes(`原文（${dim}）。`));
     }
     const focused = await knowledgeBlock(chart, 'Tháng 9 âm cần lưu ý gì về công việc?');
@@ -41,7 +42,7 @@ async function main() {
     const monthly = await knowledgeBlock(chart, question, undefined, month);
     assert.ok(monthly.text.includes('月度原文测试，须核对条件。'));
     assert.ok(monthly.text.includes('本命提醒（并非流月断语）'));
-    assert.ok(monthly.text.length <= 8000);
+    assert.ok(monthly.stats.dataset.chars <= 8000);
     const summary = await knowledgeBlock(chart, 'Công việc ra sao?', undefined, undefined, true);
     assert.equal(summary.stats.dataset.dims.length, DATASET_DIMS.length);
     console.log('interpret-general passed');

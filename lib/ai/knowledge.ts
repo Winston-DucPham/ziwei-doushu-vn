@@ -1,5 +1,6 @@
 import type { ZiweiChart } from '@/lib/ziwei/types';
-import { viPalace } from '@/lib/i18n/vi';
+import { cornellReferences } from './cornell';
+import { viPalace, viStar } from '@/lib/i18n/vi';
 import { DATASET_DIMS, lookupDataset, type DatasetRow, type DatasetDim } from '@/lib/ai/dataset-v4';
 import type { lunarMonthContext } from './lunar-month-context';
 import type { Trace, Observation } from '@/lib/ai/trace';
@@ -137,8 +138,37 @@ ${excerpt}`;
     if (!usedDims.includes(dim)) usedDims.push(dim);
     sections.push(`${label}\n${excerpt}`);
   }
-  const text = sections.length ? sections.join('\n\n') : '此问题没有可用的数据集原文。只能列出命盘事实，涉及解读时说明依据不足。';
-  const stats = { dataset: { key: lookup.key, source: lookup.source, dims: usedDims, chars: sections.join('\n\n').length }, totalChars: text.length };
+  const terms = new Map<string, number>();
+  for (const [pattern, palace] of QUESTION_PALACES) {
+    if (pattern.test(question)) terms.set(palace.length === 1 ? palace + '宫' : palace, 5);
+  }
+  const fallbackStars: string[] = [];
+  const lowerQuestion = question.toLowerCase();
+  for (const palace of chart.palaces) {
+    for (const star of palace.stars) {
+      if (lowerQuestion.includes(viStar(star.name).toLowerCase())) terms.set(star.name, 8);
+      else if (star.type === 'major' && palace.isMingGong) fallbackStars.push(star.name);
+    }
+  }
+  if (month && !month.状态) {
+    for (const term of ['斗君', '月令', '流月']) terms.set(term, 12);
+  }
+  if (/đại hạn/i.test(question)) terms.set('大限', 6);
+  if (/lưu niên/i.test(question)) terms.set('流年', 6);
+  if (!terms.size) for (const star of fallbackStars) terms.set(star, 1);
+  let cornell: Awaited<ReturnType<typeof cornellReferences>>;
+  let cornellAvailable = true;
+  try { cornell = await cornellReferences(terms); }
+  catch (error) {
+    cornellAvailable = false;
+    console.error('[interpret] Không đọc được ghi chú Cornell:', error);
+    cornell = [];
+  }
+  const datasetText = sections.join('\n\n');
+  const text = [datasetText || '此问题没有可用的数据集原文。缺少数据集依据时不要伪造出处。',
+    ...cornell.map(rule => [rule.label, rule.text, ...rule.visuals].join('\n'))].join('\n\n');
+  const stats = { dataset: { key: lookup.key, source: lookup.source, dims: usedDims, chars: datasetText.length },
+    cornell: { available: cornellAvailable, labels: cornell.map(rule => rule.label) }, totalChars: text.length };
   span?.end({
     output: { hit: !!lookup.row, chars: stats.dataset.chars },
     metadata: { key: lookup.key, source: lookup.source, wantedDims, usedDims, monthlyChars },
