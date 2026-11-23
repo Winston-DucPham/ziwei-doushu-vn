@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ZiweiChart, Palace, Star } from '@/lib/ziwei/types';
-import { BRANCHES, STEMS } from '@/lib/ziwei/constants';
+import { BRANCHES_VI, viPalace, viTerm } from '@/lib/i18n/vi';
 import { boshiShenName, jiangQianShenName, suiQianShenName } from '@/lib/ziwei/shier-shen';
 import PalaceCell from './PalaceCell';
 import TimeNav, { type TimeView, getYearStemIndex, buildSiHuaOverlay } from './TimeNav';
@@ -12,6 +12,11 @@ interface ChartBoardProps {
   onStarSelect?: (star: Star, palace: Palace) => void;
   onPalaceSelect?: (palace: Palace) => void;
   onSiHuaClick?: (starName: string, siHua: string, view: TimeView) => void;
+  /** Tùy chọn: điều khiển từ bên ngoài (để thanh thời gian ở trang /chart đồng bộ với lá số) */
+  view?: TimeView;
+  liunianYear?: number;
+  onViewChange?: (view: TimeView) => void;
+  onYearChange?: (year: number) => void;
 }
 
 const BRANCH_GRID_POS: Record<number, [number, number]> = {
@@ -42,7 +47,7 @@ function sortClockwise(branches: number[]): number[] {
 }
 
 /** 三方四正：本宫 + 对宫 + 两个三合宫 */
-function getSanFangSiZheng(branch: number): [number, number, number, number] {
+export function getSanFangSiZheng(branch: number): [number, number, number, number] {
   return [
     branch,
     (branch + 6) % 12,   // 对宫
@@ -53,10 +58,22 @@ function getSanFangSiZheng(branch: number): [number, number, number, number] {
 
 const ANIMATION_ORDER = [5, 6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4];
 
-export default function ChartBoard({ chart, onStarSelect, onPalaceSelect, onSiHuaClick }: ChartBoardProps) {
+export default function ChartBoard({
+  chart, onStarSelect, onPalaceSelect, onSiHuaClick,
+  view, liunianYear: liunianYearProp, onViewChange, onYearChange,
+}: ChartBoardProps) {
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
-  const [timeView, setTimeView] = useState<TimeView>('mingpan');
-  const [liunianYear, setLiunianYear] = useState<number>(new Date().getFullYear());
+  const [innerView, setInnerView] = useState<TimeView>('mingpan');
+  const [innerYear, setInnerYear] = useState<number>(new Date().getFullYear());
+  const timeView = view ?? innerView;
+  const liunianYear = liunianYearProp ?? innerYear;
+  const setTimeView = (v: TimeView) => { setInnerView(v); onViewChange?.(v); };
+  const setLiunianYear = (y: number) => { setInnerYear(y); onYearChange?.(y); };
+
+  const solar = chart.birthInfo.origInput ?? chart.birthInfo;
+  const lunar = chart.lunarInfo;
+  const formatDate = (day: number, month: number, year: number) =>
+    [day, month].map(value => String(value).padStart(2, '0')).join('/') + '/' + year;
 
   const palaceMap: Record<number, Palace> = {};
   chart.palaces.forEach(p => { palaceMap[p.branch] = p; });
@@ -73,9 +90,9 @@ export default function ChartBoard({ chart, onStarSelect, onPalaceSelect, onSiHu
     }
     return {};
   })();
-  const overlayLabel = timeView === 'daxian' ? '限' : timeView === 'liunian' ? '年' : undefined;
+  const overlayLabel = timeView === 'daxian' ? 'Hạn' : timeView === 'liunian' ? 'Niên' : undefined;
 
-  // 十二神煞只在展示层计算：岁前/将前按当前视图支，博士始终按生年干与性别。
+  // Thập nhị thần chỉ tính ở lớp hiển thị: Tuế tiền/Tướng tiền theo chi hiện tại, Bác sĩ theo can/giới tính năm sinh.
   const shierShenAnchor = timeView === 'liunian'
     ? (((liunianYear - 4) % 12) + 12) % 12
     : timeView === 'daxian' && currentDx
@@ -83,12 +100,9 @@ export default function ChartBoard({ chart, onStarSelect, onPalaceSelect, onSiHu
     : chart.lunarInfo.yearBranch;
 
   const handlePalaceClick = (branch: number) => {
-    const isDeselecting = selectedBranch === branch;
     setSelectedBranch(prev => prev === branch ? null : branch);
-    if (!isDeselecting) {
-      const palace = palaceMap[branch];
-      if (palace) onPalaceSelect?.(palace);
-    }
+    const palace = palaceMap[branch];
+    if (palace) onPalaceSelect?.(palace);
   };
 
   // 三方四正
@@ -116,7 +130,7 @@ export default function ChartBoard({ chart, onStarSelect, onPalaceSelect, onSiHu
           Zi Wei Dou Shu
         </div>
         <h2 className="text-sm tracking-[0.25em] font-medium" style={{ color: 'var(--t-gold)' }}>
-          {chart.birthInfo.name ? `${chart.birthInfo.name} · ` : ''}紫微斗数命盘
+          {chart.birthInfo.name ? `${chart.birthInfo.name} · ` : ''}Lá số Tử Vi
         </h2>
       </motion.div>
 
@@ -171,11 +185,11 @@ export default function ChartBoard({ chart, onStarSelect, onPalaceSelect, onSiHu
           </div>
 
           <div className="text-center space-y-1">
-            <div className="text-[9px] tracking-[0.3em] font-medium" style={{ color: 'var(--t-gold)' }}>紫微斗数</div>
+            <div className="text-[9px] tracking-[0.3em] font-medium" style={{ color: 'var(--t-gold)' }}>Tử Vi Đẩu Số</div>
             <div className="text-[10px] space-y-0.5" style={{ color: 'var(--t-faint)' }}>
-              <div>命宫 <span style={{ color: 'var(--t-gold)', opacity: 0.7 }}>{BRANCHES[chart.mingGongBranch]}</span></div>
-              <div>身宫 <span className="text-sky-500/70">{BRANCHES[chart.shenGongBranch]}</span></div>
-              <div className="text-[9px]" style={{ color: 'var(--t-gold)', opacity: 0.75 }}>{chart.wuxingJuName}</div>
+              <div>Mệnh tại <span style={{ color: 'var(--t-gold)', opacity: 0.7 }}>{BRANCHES_VI[chart.mingGongBranch]}</span></div>
+              <div>Thân tại <span className="text-sky-500/70">{BRANCHES_VI[chart.shenGongBranch]}</span></div>
+              <div className="text-[9px]" style={{ color: 'var(--t-gold)', opacity: 0.75 }}>{viTerm(chart.wuxingJuName)}</div>
             </div>
           </div>
 
@@ -184,16 +198,16 @@ export default function ChartBoard({ chart, onStarSelect, onPalaceSelect, onSiHu
             return (
               <div className="border border-purple-500/30 rounded-lg px-3 py-1.5 text-center"
                 style={{ background: 'rgba(147,51,234,0.06)' }}>
-                <div className="text-[8px] text-purple-500/80 mb-0.5 tracking-wider">当前大限</div>
-                <div className="text-[12px] text-purple-400 font-medium tabular-nums">{dx.startAge}–{dx.endAge}岁</div>
-                <div className="text-[9px] text-purple-500/60">{dx.palaceName}</div>
+                <div className="text-[8px] text-purple-500/80 mb-0.5 tracking-wider">Đại hạn hiện tại</div>
+                <div className="text-[12px] text-purple-400 font-medium tabular-nums">{dx.startAge}–{dx.endAge} tuổi</div>
+                <div className="text-[9px] text-purple-500/60">{viPalace(dx.palaceName)}</div>
               </div>
             );
           })()}
 
-          <div className="text-[8px] text-center leading-relaxed font-mono" style={{ color: 'var(--t-faint)', opacity: 0.75 }}>
-            {chart.lunarInfo.lunarYear}·{chart.lunarInfo.isLeapMonth ? '闰' : ''}
-            {chart.lunarInfo.lunarMonth}·{chart.lunarInfo.lunarDay}
+          <div className="text-[10px] text-center leading-relaxed tabular-nums" style={{ color: 'var(--t-text2)' }}>
+            <div>Dương lịch: {formatDate(solar.day, solar.month, solar.year)}</div>
+            <div>Âm lịch lập số: {formatDate(lunar.lunarDay, Math.abs(lunar.lunarMonth), lunar.lunarYear)}{lunar.isLeapMonth && ' (tháng nhuận)'}</div>
           </div>
         </motion.div>
 
@@ -282,15 +296,15 @@ export default function ChartBoard({ chart, onStarSelect, onPalaceSelect, onSiHu
         className="mt-3 flex items-center justify-center gap-2 text-[9px] flex-wrap"
       >
         {[
-          { h: '化禄', c: 'text-emerald-500 border-emerald-500/30' },
-          { h: '化权', c: 'text-blue-500 border-blue-500/30' },
-          { h: '化科', c: 'text-yellow-500 border-yellow-500/30' },
-          { h: '化忌', c: 'text-red-500 border-red-500/30' },
+          { h: 'Hóa Lộc', c: 'text-emerald-500 border-emerald-500/30' },
+          { h: 'Hóa Quyền', c: 'text-blue-500 border-blue-500/30' },
+          { h: 'Hóa Khoa', c: 'text-yellow-500 border-yellow-500/30' },
+          { h: 'Hóa Kỵ', c: 'text-red-500 border-red-500/30' },
         ].map(({ h, c }) => (
           <span key={h} className={`border px-1.5 py-0.5 rounded-full font-medium ${c}`}>{h}</span>
         ))}
         <span className="px-1.5 py-0.5 rounded-full" style={{ color: 'var(--t-faint)', border: '1px solid var(--t-border)' }}>
-          点击宫位看三方四正
+          Bấm vào cung để xem tam phương tứ chính
         </span>
       </motion.div>
     </div>

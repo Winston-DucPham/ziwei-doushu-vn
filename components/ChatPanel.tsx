@@ -1,30 +1,27 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import ReadingPending from './ReadingPending';
+import { useReading } from './useReading';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ZiweiChart } from '@/lib/ziwei/types';
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
 
 interface ChatPanelProps {
   chart: ZiweiChart;
 }
 
 const PRESET_QUESTIONS = [
-  '我的整体命格如何？性格特点是什么？',
-  '我的感情婚姻运势如何？',
-  '我的事业财运如何？适合什么方向？',
-  '我现在的大限运势如何？',
-  '我的健康需要注意什么？',
-  '今年的流年运势如何？',
+  'Tổng quan mệnh cách và tính cách của tôi ra sao?',
+  'Vận tình cảm và hôn nhân của tôi như thế nào?',
+  'Sự nghiệp và tài vận của tôi như thế nào? Hướng phù hợp là gì?',
+  'Vận trình đại hạn hiện tại của tôi ra sao?',
+  'Sức khỏe của tôi cần lưu ý điều gì?',
+  'Vận trình lưu niên năm nay như thế nào?',
 ];
 
 export default function ChatPanel({ chart }: ChatPanelProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { messages, loading, send, stop } = useReading(chart);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,69 +30,16 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
     }
   }, [messages]);
 
-  const sendMessage = async (text: string) => {
-    if (!text.trim() || loading) return;
-    const userMsg: Message = { role: 'user', content: text };
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/interpret', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chart, messages: [...messages, userMsg] }),
-      });
-
-      if (res.status === 404) throw new Error('api-missing');
-      if (!res.ok) throw new Error('请求失败');
-      if (!res.body) throw new Error('无响应流');
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let assistantText = '';
-
-      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') break;
-            try {
-              const parsed = JSON.parse(data);
-              const delta = parsed.delta?.text ?? '';
-              assistantText += delta;
-              setMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { role: 'assistant', content: assistantText };
-                return updated;
-              });
-            } catch { /* skip */ }
-          }
-        }
-      }
-    } catch (e) {
-      const missing = e instanceof Error && e.message === 'api-missing';
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: missing ? '开源版不含 AI 解读接口（/api/interpret），需要你自己实现后才能用，详见 README「快速开始」。排盘本身不需要任何 API Key。' : '解读失败，请检查API配置或稍后重试。',
-      }]);
-    } finally {
-      setLoading(false);
-    }
+  const sendMessage = (text: string) => {
+    if (send(text)) setInput('');
   };
 
   return (
     <div className="flex flex-col h-full rounded-xl overflow-hidden card-glass">
       {/* 标题 */}
       <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--t-border)' }}>
-        <h3 className="text-xs font-medium tracking-widest" style={{ color: 'var(--t-gold)' }}>AI 命盘解读</h3>
-        <p className="text-[10px] mt-0.5" style={{ color: 'var(--t-faint)' }}>倪海厦正宗紫微斗数 · 智慧解析</p>
+        <h3 className="text-xs font-medium tracking-widest" style={{ color: 'var(--t-gold)' }}>Giải đọc lá số AI</h3>
+        <p className="text-[10px] mt-0.5" style={{ color: 'var(--t-faint)' }}>Theo lá số và Dataset v4</p>
       </div>
 
       {/* 消息列表 */}
@@ -104,8 +48,8 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-8">
             <div className="text-4xl mb-3" style={{ color: 'var(--t-gold)', opacity: 0.15 }}>✦</div>
             <p className="text-xs leading-relaxed" style={{ color: 'var(--t-faint)' }}>
-              命盘已生成，可直接提问<br />
-              或从下方选择常见问题开始解读
+              Lá số đã được lập. Hỏi trực tiếp<br />
+              hoặc chọn câu hỏi gợi ý bên dưới.
             </p>
           </motion.div>
         )}
@@ -131,7 +75,7 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
                 }}
               >
                 {msg.role === 'assistant' && (
-                  <div className="text-[10px] mb-1" style={{ color: 'var(--t-faint)' }}>命理师 ·</div>
+                  <div className="text-[10px] mb-1" style={{ color: 'var(--t-faint)' }}>Thầy Tử Vi ·</div>
                 )}
                 <div className="whitespace-pre-wrap text-xs leading-relaxed">
                   {msg.content}
@@ -143,6 +87,10 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
             </motion.div>
           ))}
         </AnimatePresence>
+        {messages[messages.length - 1]?.stopped && (
+          <p role="status" className="text-xs" style={{ color: 'var(--t-faint)' }}>Đã dừng trả lời.</p>
+        )}
+        {loading && messages[messages.length - 1]?.role === 'user' && <ReadingPending />}
       </div>
 
       {/* 预设问题 */}
@@ -184,7 +132,7 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage(input)}
-            placeholder="输入问题，如：我的感情运势如何？"
+            placeholder="Nhập câu hỏi, ví dụ: Vận tình cảm của tôi như thế nào?"
             disabled={loading}
             className="flex-1 rounded-lg px-3 py-2 text-xs focus:outline-none transition-colors"
             style={{
@@ -194,8 +142,8 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
             }}
           />
           <button
-            onClick={() => sendMessage(input)}
-            disabled={loading || !input.trim()}
+            onClick={loading ? stop : () => sendMessage(input)}
+            disabled={!loading && !input.trim()}
             className="px-3 py-2 rounded-lg text-xs font-medium transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             style={{
               background: 'rgba(212,168,67,0.15)',
@@ -203,7 +151,7 @@ export default function ChatPanel({ chart }: ChatPanelProps) {
               color: 'var(--t-gold)',
             }}
           >
-            解读
+            {loading ? 'Dừng' : 'Giải đọc'}
           </button>
         </div>
       </div>

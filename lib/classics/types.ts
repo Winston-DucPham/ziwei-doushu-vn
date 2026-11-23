@@ -33,10 +33,13 @@ export interface Book {
   slug: string;
   /** 朝代 */
   dynasty: string;
+  dynasty_vi?: string;
   /** 作者（多人或不详时填"不详"或多人）*/
   author: string;
+  author_vi?: string;
   /** 简介 */
   intro: string;
+  intro_vi?: string;
   /** 总字数（粗略）*/
   wordCount: number;
   chapters: Chapter[];
